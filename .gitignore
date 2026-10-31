@@ -1,0 +1,4 @@
+.claude/
+.impeccable/review/
+.impeccable/hook.cache.json
+__pycache__/

@@ -1,0 +1,875 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-31T18:49:52+00:00",
+  "title": "Design System: План питания",
+  "extensions": {
+    "colorMeta": {
+      "ground": {
+        "role": "neutral",
+        "displayName": "Стеллаж",
+        "canonical": "#e2e4e7",
+        "oklch": "oklch(91.8% 0.005 258.3)",
+        "cssVar": "--ground",
+        "theme": "light",
+        "tonalRamp": [
+          "#0b0b0c",
+          "#252526",
+          "#414243",
+          "#606163",
+          "#818284",
+          "#a4a5a7",
+          "#c7c9cc",
+          "#edeff1"
+        ]
+      },
+      "label": {
+        "role": "neutral",
+        "displayName": "Этикетка",
+        "canonical": "#ffffff",
+        "oklch": "oklch(100.0% 0.000 89.9)",
+        "cssVar": "--label",
+        "theme": "light",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#a5a5a5",
+          "#c9c9c9",
+          "#eeeeee"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Чёрная краска",
+        "canonical": "#111214",
+        "oklch": "oklch(18.2% 0.004 264.5)",
+        "cssVar": "--ink",
+        "theme": "light",
+        "tonalRamp": [
+          "#0a0b0d",
+          "#242527",
+          "#414244",
+          "#606163",
+          "#818284",
+          "#a4a5a6",
+          "#c8c9ca",
+          "#eeeeef"
+        ]
+      },
+      "ink-2": {
+        "role": "neutral",
+        "displayName": "Вторичный текст",
+        "canonical": "#44484e",
+        "oklch": "oklch(40.0% 0.011 258.4)",
+        "cssVar": "--ink-2",
+        "theme": "light",
+        "tonalRamp": [
+          "#090b0f",
+          "#22252a",
+          "#3e4248",
+          "#5e6167",
+          "#7f8388",
+          "#a2a5aa",
+          "#c7c9cd",
+          "#eceff2"
+        ]
+      },
+      "ink-3": {
+        "role": "neutral",
+        "displayName": "Приглушённый текст",
+        "canonical": "#676b72",
+        "oklch": "oklch(52.7% 0.012 261.8)",
+        "cssVar": "--ink-3",
+        "theme": "light",
+        "tonalRamp": [
+          "#090b0e",
+          "#232529",
+          "#3f4248",
+          "#5e6168",
+          "#7f8289",
+          "#a2a5ab",
+          "#c6c9cf",
+          "#eceff3"
+        ]
+      },
+      "rule": {
+        "role": "neutral",
+        "displayName": "Линейка",
+        "canonical": "#dfe1e5",
+        "oklch": "oklch(90.9% 0.006 264.5)",
+        "cssVar": "--rule",
+        "theme": "light",
+        "tonalRamp": [
+          "#0b0b0c",
+          "#242526",
+          "#414243",
+          "#606163",
+          "#818285",
+          "#a3a5a8",
+          "#c7c9cd",
+          "#eceef2"
+        ]
+      },
+      "press": {
+        "role": "neutral",
+        "displayName": "Нажатие",
+        "canonical": "#f0f1f3",
+        "oklch": "oklch(95.8% 0.003 264.5)",
+        "cssVar": "--press",
+        "theme": "light",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#252525",
+          "#424243",
+          "#616162",
+          "#828283",
+          "#a4a5a6",
+          "#c8c9cb",
+          "#edeef0"
+        ]
+      },
+      "bar": {
+        "role": "neutral",
+        "displayName": "Полоса приложения",
+        "canonical": "#000000",
+        "oklch": "oklch(0.0% 0.000 0.0)",
+        "cssVar": "--bar",
+        "theme": "light",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#a5a5a5",
+          "#c9c9c9",
+          "#eeeeee"
+        ]
+      },
+      "bar-ink": {
+        "role": "neutral",
+        "displayName": "Текст полосы",
+        "canonical": "#ffffff",
+        "oklch": "oklch(100.0% 0.000 89.9)",
+        "cssVar": "--bar-ink",
+        "theme": "light",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#a5a5a5",
+          "#c9c9c9",
+          "#eeeeee"
+        ]
+      },
+      "bar-ink-2": {
+        "role": "neutral",
+        "displayName": "Приглушённый текст полосы",
+        "canonical": "#a5a9b0",
+        "oklch": "oklch(73.4% 0.011 261.8)",
+        "cssVar": "--bar-ink-2",
+        "theme": "light",
+        "tonalRamp": [
+          "#0a0b0d",
+          "#232528",
+          "#404246",
+          "#5f6166",
+          "#7f8288",
+          "#a1a5ac",
+          "#c6c9d0",
+          "#ebeff4"
+        ]
+      },
+      "hi": {
+        "role": "neutral",
+        "displayName": "Сегодня",
+        "canonical": "#111214",
+        "oklch": "oklch(18.2% 0.004 264.5)",
+        "cssVar": "--hi",
+        "theme": "light",
+        "tonalRamp": [
+          "#0a0b0d",
+          "#242527",
+          "#414244",
+          "#606163",
+          "#818284",
+          "#a4a5a6",
+          "#c8c9ca",
+          "#eeeeef"
+        ]
+      },
+      "hi-ink": {
+        "role": "neutral",
+        "displayName": "Текст сегодня",
+        "canonical": "#ffffff",
+        "oklch": "oklch(100.0% 0.000 89.9)",
+        "cssVar": "--hi-ink",
+        "theme": "light",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#a5a5a5",
+          "#c9c9c9",
+          "#eeeeee"
+        ]
+      },
+      "hi-ink-2": {
+        "role": "neutral",
+        "displayName": "Приглушённый текст сегодня",
+        "canonical": "#b3b6bc",
+        "oklch": "oklch(77.6% 0.009 264.5)",
+        "cssVar": "--hi-ink-2",
+        "theme": "light",
+        "tonalRamp": [
+          "#0a0b0d",
+          "#242527",
+          "#404245",
+          "#5f6165",
+          "#808287",
+          "#a2a5ab",
+          "#c6c9cf",
+          "#eceef4"
+        ]
+      },
+      "promo": {
+        "role": "secondary",
+        "displayName": "Промо-красный",
+        "canonical": "#d3271d",
+        "oklch": "oklch(56.1% 0.207 29.1)",
+        "cssVar": "--promo",
+        "theme": "light",
+        "tonalRamp": [
+          "#2e0000",
+          "#580000",
+          "#860000",
+          "#b6120c",
+          "#e04133",
+          "#ff7362",
+          "#ffa18f",
+          "#ffcebd"
+        ]
+      },
+      "promo-ink": {
+        "role": "secondary",
+        "displayName": "Текст промо-ярлыка",
+        "canonical": "#ffffff",
+        "oklch": "oklch(100.0% 0.000 89.9)",
+        "cssVar": "--promo-ink",
+        "theme": "light",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#a5a5a5",
+          "#c9c9c9",
+          "#eeeeee"
+        ]
+      },
+      "sticker": {
+        "role": "primary",
+        "displayName": "Наклейка «новая цена»",
+        "canonical": "#ffd84a",
+        "oklch": "oklch(89.1% 0.159 93.2)",
+        "cssVar": "--sticker",
+        "theme": "light",
+        "tonalRamp": [
+          "#110a00",
+          "#2f2400",
+          "#504000",
+          "#745f0f",
+          "#9a801f",
+          "#c1a230",
+          "#eac641",
+          "#ffec6d"
+        ]
+      },
+      "sticker-ink": {
+        "role": "primary",
+        "displayName": "Текст наклейки",
+        "canonical": "#111214",
+        "oklch": "oklch(18.2% 0.004 264.5)",
+        "cssVar": "--sticker-ink",
+        "theme": "light",
+        "tonalRamp": [
+          "#0a0b0d",
+          "#242527",
+          "#414244",
+          "#606163",
+          "#818284",
+          "#a4a5a6",
+          "#c8c9ca",
+          "#eeeeef"
+        ]
+      },
+      "sticker-ink-2": {
+        "role": "primary",
+        "displayName": "Подписи на наклейке",
+        "canonical": "#5b4a00",
+        "oklch": "oklch(41.5% 0.085 93.8)",
+        "cssVar": "--sticker-ink-2",
+        "theme": "light",
+        "tonalRamp": [
+          "#140900",
+          "#312300",
+          "#514000",
+          "#706027",
+          "#908252",
+          "#b1a57b",
+          "#d4c9a5",
+          "#f7efd1"
+        ]
+      },
+      "ground-night": {
+        "role": "neutral",
+        "displayName": "Стеллаж (ночь)",
+        "canonical": "#0a0b0d",
+        "oklch": "oklch(14.9% 0.005 264.5)",
+        "cssVar": "--ground",
+        "theme": "dark",
+        "tonalRamp": [
+          "#0a0b0d",
+          "#242527",
+          "#414244",
+          "#606163",
+          "#818284",
+          "#a4a5a6",
+          "#c8c9ca",
+          "#eeeeef"
+        ]
+      },
+      "label-night": {
+        "role": "neutral",
+        "displayName": "Этикетка (ночь)",
+        "canonical": "#17191c",
+        "oklch": "oklch(21.3% 0.007 258.4)",
+        "cssVar": "--label",
+        "theme": "dark",
+        "tonalRamp": [
+          "#0a0b0e",
+          "#232528",
+          "#404245",
+          "#5f6164",
+          "#818285",
+          "#a4a5a7",
+          "#c8c9cb",
+          "#eeeef0"
+        ]
+      },
+      "ink-night": {
+        "role": "neutral",
+        "displayName": "Чёрная краска (ночь)",
+        "canonical": "#eceef0",
+        "oklch": "oklch(94.8% 0.003 247.9)",
+        "cssVar": "--ink",
+        "theme": "dark",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#252525",
+          "#414243",
+          "#606162",
+          "#818284",
+          "#a4a5a7",
+          "#c7c9cb",
+          "#edeff1"
+        ]
+      },
+      "ink-2-night": {
+        "role": "neutral",
+        "displayName": "Вторичный текст (ночь)",
+        "canonical": "#babdc3",
+        "oklch": "oklch(79.8% 0.009 264.5)",
+        "cssVar": "--ink-2",
+        "theme": "dark",
+        "tonalRamp": [
+          "#0a0b0d",
+          "#242527",
+          "#414245",
+          "#5f6165",
+          "#808287",
+          "#a2a5aa",
+          "#c6c9cf",
+          "#eceef4"
+        ]
+      },
+      "ink-3-night": {
+        "role": "neutral",
+        "displayName": "Приглушённый текст (ночь)",
+        "canonical": "#92969d",
+        "oklch": "oklch(67.2% 0.011 261.8)",
+        "cssVar": "--ink-3",
+        "theme": "dark",
+        "tonalRamp": [
+          "#0a0b0d",
+          "#232528",
+          "#404246",
+          "#5e6167",
+          "#7f8289",
+          "#a1a5ac",
+          "#c6c9cf",
+          "#ebeff4"
+        ]
+      },
+      "rule-night": {
+        "role": "neutral",
+        "displayName": "Линейка (ночь)",
+        "canonical": "#26292e",
+        "oklch": "oklch(28.0% 0.010 260.7)",
+        "cssVar": "--rule",
+        "theme": "dark",
+        "tonalRamp": [
+          "#090b0f",
+          "#22252a",
+          "#3f4247",
+          "#5f6166",
+          "#808286",
+          "#a3a5a9",
+          "#c7c9cc",
+          "#edeef1"
+        ]
+      },
+      "press-night": {
+        "role": "neutral",
+        "displayName": "Нажатие (ночь)",
+        "canonical": "#202328",
+        "oklch": "oklch(25.5% 0.010 260.7)",
+        "cssVar": "--press",
+        "theme": "dark",
+        "tonalRamp": [
+          "#090b0f",
+          "#22252a",
+          "#3f4247",
+          "#5f6166",
+          "#808286",
+          "#a3a5a9",
+          "#c7c9cc",
+          "#edeef1"
+        ]
+      },
+      "hi-night": {
+        "role": "neutral",
+        "displayName": "Сегодня (ночь)",
+        "canonical": "#eceef0",
+        "oklch": "oklch(94.8% 0.003 247.9)",
+        "cssVar": "--hi",
+        "theme": "dark",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#252525",
+          "#414243",
+          "#606162",
+          "#818284",
+          "#a4a5a7",
+          "#c7c9cb",
+          "#edeff1"
+        ]
+      },
+      "hi-ink-night": {
+        "role": "neutral",
+        "displayName": "Текст сегодня (ночь)",
+        "canonical": "#0a0b0d",
+        "oklch": "oklch(14.9% 0.005 264.5)",
+        "cssVar": "--hi-ink",
+        "theme": "dark",
+        "tonalRamp": [
+          "#0a0b0d",
+          "#242527",
+          "#414244",
+          "#606163",
+          "#818284",
+          "#a4a5a6",
+          "#c8c9ca",
+          "#eeeeef"
+        ]
+      },
+      "hi-ink-2-night": {
+        "role": "neutral",
+        "displayName": "Приглушённый текст сегодня (ночь)",
+        "canonical": "#45484e",
+        "oklch": "oklch(40.1% 0.011 264.4)",
+        "cssVar": "--hi-ink-2",
+        "theme": "dark",
+        "tonalRamp": [
+          "#090b0f",
+          "#23252a",
+          "#3f4248",
+          "#5e6167",
+          "#808288",
+          "#a3a5aa",
+          "#c7c9cd",
+          "#edeef2"
+        ]
+      },
+      "promo-night": {
+        "role": "secondary",
+        "displayName": "Промо-красный (ночь)",
+        "canonical": "#ff5848",
+        "oklch": "oklch(68.4% 0.205 29.0)",
+        "cssVar": "--promo",
+        "theme": "dark",
+        "tonalRamp": [
+          "#280000",
+          "#500000",
+          "#7d100b",
+          "#ac2b22",
+          "#dd4638",
+          "#ff6958",
+          "#ff9885",
+          "#ffc6b3"
+        ]
+      },
+      "promo-ink-night": {
+        "role": "secondary",
+        "displayName": "Текст промо-ярлыка (ночь)",
+        "canonical": "#0a0b0d",
+        "oklch": "oklch(14.9% 0.005 264.5)",
+        "cssVar": "--promo-ink",
+        "theme": "dark",
+        "tonalRamp": [
+          "#0a0b0d",
+          "#242527",
+          "#414244",
+          "#606163",
+          "#818284",
+          "#a4a5a6",
+          "#c8c9ca",
+          "#eeeeef"
+        ]
+      },
+      "sticker-night": {
+        "role": "primary",
+        "displayName": "Наклейка «новая цена» (ночь)",
+        "canonical": "#ffd23d",
+        "oklch": "oklch(87.9% 0.163 91.1)",
+        "cssVar": "--sticker",
+        "theme": "dark",
+        "tonalRamp": [
+          "#120a00",
+          "#302300",
+          "#524000",
+          "#765e02",
+          "#9d7f14",
+          "#c5a126",
+          "#efc437",
+          "#ffea6b"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Заголовок страницы справки, прописными."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Заголовки разделов рецептов и справки, прописными."
+      },
+      "bar-title": {
+        "displayName": "Bar title",
+        "purpose": "Номер недели и кнопка «назад» в полосе приложения."
+      },
+      "day-title": {
+        "displayName": "Day title",
+        "purpose": "Название дня в заголовке дня, прописными."
+      },
+      "date-num": {
+        "displayName": "Date num",
+        "purpose": "Число месяца в заголовке дня."
+      },
+      "price-day": {
+        "displayName": "Price day",
+        "purpose": "Итог ккал дня справа."
+      },
+      "price-meal": {
+        "displayName": "Price meal",
+        "purpose": "Ккал приёма пищи справа (19px в свёрнутом дне)."
+      },
+      "price-was": {
+        "displayName": "Price was",
+        "purpose": "Зачёркнутая цифра плана рядом с изменённой."
+      },
+      "time": {
+        "displayName": "Time",
+        "purpose": "Время приёма пищи."
+      },
+      "sku": {
+        "displayName": "SKU",
+        "purpose": "Код блюда перед составом."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Кнопки, ярлык тренировки, кнопка «Сегодня», чипы, прописными."
+      },
+      "label-sm": {
+        "displayName": "Label sm",
+        "purpose": "Пометки «правка» и «из …», подписи полей, прописными."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Базовый текст, абзацы справки до 70ch."
+      },
+      "meal-text": {
+        "displayName": "Meal text",
+        "purpose": "Состав приёма пищи в любом состоянии строки."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "Вода, «Отдых», пояснения."
+      }
+    },
+    "fonts": [
+      {
+        "family": "Sofia Sans Extra Condensed",
+        "source": "docs/fonts/sofia-sans-xcond-latin.woff2, docs/fonts/sofia-sans-xcond-cyrillic.woff2",
+        "weights": "500 900",
+        "license": "OFL",
+        "cssVar": "--f-num"
+      },
+      {
+        "family": "системный стек (-apple-system, system-ui, ...)",
+        "cssVar": "--f-ui"
+      }
+    ],
+    "shadows": [
+      {
+        "name": "sticker",
+        "value": "0 1px 2px rgb(60 48 0 / 0.28)",
+        "valueDark": "0 1px 3px rgb(0 0 0 / 0.6)",
+        "cssVar": "--shadow",
+        "purpose": "Наклейка: изменённая строка, плашка изменённого итога дня, полоса обмена."
+      },
+      {
+        "name": "floating",
+        "value": "0 4px 14px rgb(0 0 0 / 0.28)",
+        "purpose": "Кнопка «Сегодня» и тост."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "cssVar": "--ease",
+        "purpose": "Единая кривая для смены состояний."
+      },
+      {
+        "name": "sticker-wipe",
+        "value": "clip-path 220ms var(--ease)",
+        "purpose": "Наклейка проявляется слева направо."
+      },
+      {
+        "name": "chevron",
+        "value": "transform 180ms var(--ease)",
+        "purpose": "Поворот стрелки свёрнутого дня."
+      },
+      {
+        "name": "reveal",
+        "value": "200ms var(--ease); opacity 0 -> 1, translateY(-4px) -> 0",
+        "purpose": "Рецепт и действия в раскрытой строке."
+      },
+      {
+        "name": "rise",
+        "value": "200ms var(--ease); opacity 0 -> 1, translate 0 8px -> 0",
+        "purpose": "Появление кнопки «Сегодня» и тоста."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "animation: none; transition: none",
+        "purpose": "При prefers-reduced-motion: reduce."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "wide",
+        "value": "640px",
+        "purpose": "Лента и полоса приложения ограничены 720px по центру."
+      }
+    ],
+    "layout": {
+      "maxWidth": "720px",
+      "gutter": "12px + env(safe-area-inset-*)",
+      "mealGrid": "34px minmax(0,1fr) auto, gap 8px",
+      "dayHeadGrid": "minmax(0,1fr) auto auto, gap 8px",
+      "feedBottomReserve": "96px + env(safe-area-inset-bottom)"
+    },
+    "outlines": [
+      {
+        "name": "focus",
+        "value": "2px solid var(--ink), offset 2px; на тёмных плашках var(--bar-ink)"
+      },
+      {
+        "name": "swap-match",
+        "value": "2px solid var(--ink), offset -4px"
+      },
+      {
+        "name": "swap-source",
+        "value": "2px dashed var(--sticker-ink), offset -4px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Полоса приложения",
+      "kind": "nav",
+      "refersTo": "app-bar",
+      "description": "Чёрная полоса сверху: неделя, диапазон дат, иконки рецептов и справки.",
+      "html": "<header class=\"ds-bar\"><span class=\"ds-bar-week\"><b>Неделя 10</b><span>26 окт – 1 ноя</span></span><button class=\"ds-icon-btn\" aria-label=\"Рецепты\"><svg viewBox=\"0 0 24 24\"><path d=\"M4 5.5A1.5 1.5 0 0 1 5.5 4H11v15H5.5A1.5 1.5 0 0 0 4 20.5zM20 5.5A1.5 1.5 0 0 0 18.5 4H13v15h5.5a1.5 1.5 0 0 1 1.5 1.5zM4 20.5V5.5M20 20.5V5.5\"/></svg></button><button class=\"ds-icon-btn\" aria-label=\"Справка\"><svg viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"8.5\"/><path d=\"M12 11v5.5M12 7.6v.4\"/></svg></button></header>",
+      "css": ".ds-bar { display: flex; align-items: center; gap: 2px; height: 52px; padding: 0 12px; background: var(--bar); color: var(--bar-ink); } .ds-bar-week { flex: 1; display: flex; align-items: baseline; gap: 8px; } .ds-bar-week b { font: 800 23px/1 var(--f-num); text-transform: uppercase; letter-spacing: 0.01em; } .ds-bar-week span { font: 600 17px/1 var(--f-num); color: var(--bar-ink-2); } .ds-icon-btn { width: 44px; height: 44px; display: grid; place-items: center; background: none; border: 0; color: var(--bar-ink); cursor: pointer; } .ds-icon-btn svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: square; stroke-linejoin: miter; } .ds-icon-btn:active { opacity: 0.6; } .ds-icon-btn:focus-visible { outline: 2px solid var(--bar-ink); outline-offset: 2px; }"
+    },
+    {
+      "name": "Заголовок сегодняшнего дня",
+      "kind": "custom",
+      "refersTo": "day-head-today",
+      "description": "Полка сегодняшнего дня: дата, название, промо-ярлык тренировки, изменённый итог на наклейке и зачёркнутый итог плана.",
+      "html": "<header class=\"ds-day-head\"><span class=\"ds-date\"><b>31</b><span>окт</span></span><span class=\"ds-day-main\"><span class=\"ds-day-title\">Сегодня <span>сб</span></span><span class=\"ds-badge\">HIIT 10:00</span></span><span class=\"ds-total\"><span class=\"ds-kcal\"><s>1482</s><b>1490</b><small>ккал</small></span><span class=\"ds-water\">9 стаканов воды</span></span></header>",
+      "css": ".ds-day-head { display: grid; grid-template-columns: 36px minmax(0,1fr) auto; gap: 10px; align-items: center; min-height: 50px; padding: 5px 12px; background: var(--hi); color: var(--hi-ink); } .ds-date { display: grid; justify-items: center; } .ds-date b { font: 900 31px/0.86 var(--f-num); font-variant-numeric: tabular-nums; } .ds-date span { margin-top: 3px; font: 700 12px/1 var(--f-num); text-transform: uppercase; letter-spacing: 0.08em; color: var(--hi-ink-2); } .ds-day-main { display: grid; justify-items: start; gap: 4px; } .ds-day-title { font: 800 19px/1.05 var(--f-num); text-transform: uppercase; letter-spacing: 0.02em; } .ds-day-title span { font-weight: 700; color: var(--hi-ink-2); } .ds-badge { padding: 3px 6px 2px; background: var(--promo); color: var(--promo-ink); font: 800 14px/1 var(--f-num); text-transform: uppercase; letter-spacing: 0.04em; } .ds-total { display: grid; justify-items: end; } .ds-kcal { display: flex; align-items: baseline; gap: 3px; } .ds-kcal s { margin-right: 3px; font: 700 15px/1 var(--f-num); font-variant-numeric: tabular-nums; color: var(--hi-ink-2); } .ds-kcal b { padding: 2px 3px 0; background: var(--sticker); color: var(--sticker-ink); box-shadow: var(--shadow); font: 900 25px/0.9 var(--f-num); font-variant-numeric: tabular-nums; } .ds-kcal small { font: 800 12px/1 var(--f-num); text-transform: uppercase; letter-spacing: 0.04em; } .ds-water { margin-top: 3px; font-size: 12px; color: var(--hi-ink-2); }"
+    },
+    {
+      "name": "Строка приёма пищи",
+      "kind": "custom",
+      "refersTo": "meal-row",
+      "description": "Время, артикул и состав, ккал справа. Ближайший приём сегодня отмечен чёрной плашкой времени.",
+      "html": "<button class=\"ds-meal\"><span class=\"ds-time\"><span class=\"ds-next\">23:00</span></span><span class=\"ds-text\"><span class=\"ds-sku\">K1</span> Pringles Sour Cream &amp; Onion 40 г (≈20 шт.).</span><span class=\"ds-price\"><b>214</b></span></button>",
+      "css": ".ds-meal { display: grid; grid-template-columns: 34px minmax(0,1fr) auto; gap: 8px; align-items: start; width: 100%; padding: 5px 12px 6px; background: var(--label); color: var(--ink); border: 0; border-top: 1px solid var(--rule); text-align: left; font: 15px/1.34 var(--f-ui); cursor: pointer; } .ds-meal:active { background: var(--press); } .ds-meal:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; } .ds-time { display: grid; padding-top: 1px; font: 700 16px/1.22 var(--f-num); font-variant-numeric: tabular-nums; } .ds-next { justify-self: start; margin: -1px -4px 0; padding: 1px 4px 0; background: var(--ink); color: var(--label); } .ds-text { font-size: 14.5px; line-height: 1.3; } .ds-sku { font: 700 14px/1 var(--f-num); letter-spacing: 0.05em; color: var(--ink-3); } .ds-price { padding-top: 1px; text-align: right; } .ds-price b { font: 900 22px/1 var(--f-num); font-variant-numeric: tabular-nums; }"
+    },
+    {
+      "name": "Изменённая строка (наклейка)",
+      "kind": "custom",
+      "refersTo": "meal-row-edited",
+      "description": "Правка пользователя: жёлтая наклейка под строкой, пометка источника и зачёркнутая цифра плана слева от новой.",
+      "html": "<button class=\"ds-meal-ed\"><span class=\"ds-time-ed\">15:00</span><span class=\"ds-text-ed\"><span class=\"ds-sku-ed\">M7</span> пельмени «Сибирские» с индейкой 185 г; сметана 15% 20 г. <span class=\"ds-from\">из вс 1 ноя</span></span><span class=\"ds-price-ed\"><s>412</s><b>409</b></span></button>",
+      "css": ".ds-meal-ed { display: grid; grid-template-columns: 34px minmax(0,1fr) auto; gap: 8px; align-items: start; width: 100%; padding: 5px 12px 6px; background: var(--sticker); color: var(--sticker-ink); box-shadow: var(--shadow); border: 0; text-align: left; font: 15px/1.34 var(--f-ui); cursor: pointer; } .ds-meal-ed:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; } .ds-time-ed { padding-top: 1px; font: 700 16px/1.22 var(--f-num); font-variant-numeric: tabular-nums; } .ds-text-ed { font-size: 14.5px; line-height: 1.3; } .ds-sku-ed { font: 700 14px/1 var(--f-num); letter-spacing: 0.05em; color: var(--sticker-ink-2); } .ds-from { margin-left: 4px; font: 800 13px/1 var(--f-num); text-transform: uppercase; letter-spacing: 0.04em; color: var(--sticker-ink-2); white-space: nowrap; } .ds-price-ed { display: flex; align-items: baseline; gap: 4px; padding-top: 1px; } .ds-price-ed s { font: 700 14px/1 var(--f-num); font-variant-numeric: tabular-nums; color: var(--sticker-ink-2); } .ds-price-ed b { font: 900 22px/1 var(--f-num); font-variant-numeric: tabular-nums; }"
+    },
+    {
+      "name": "Кнопка",
+      "kind": "button",
+      "refersTo": "button",
+      "description": "Прямоугольная кнопка с рамкой 1.5px, прописные сжатые буквы.",
+      "html": "<button class=\"ds-btn\">Как в плане</button>",
+      "css": ".ds-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 2px 14px 0; border: 1.5px solid var(--ink); border-radius: 0; background: var(--label); color: var(--ink); font: 800 16px/1 var(--f-num); text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; } .ds-btn:active { background: var(--press); } .ds-btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; } .ds-btn:disabled { opacity: 0.4; cursor: default; }"
+    },
+    {
+      "name": "Главная кнопка",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Сохранение в редакторе, заливка чёрной краской.",
+      "html": "<button class=\"ds-btn-primary\">Сохранить</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 2px 14px 0; border: 1.5px solid var(--ink); border-radius: 0; background: var(--ink); color: var(--label); font: 800 16px/1 var(--f-num); text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; } .ds-btn-primary:active { opacity: 0.8; } .ds-btn-primary:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }"
+    },
+    {
+      "name": "Числовое поле",
+      "kind": "input",
+      "refersTo": "input-number",
+      "description": "Поле ккал или кода в редакторе: прямые углы, рамка 1.5px, сжатые табличные цифры.",
+      "html": "<label class=\"ds-field\">Ккал<input value=\"145\" inputmode=\"numeric\"></label>",
+      "css": ".ds-field { display: grid; gap: 4px; font: 800 13px/1 var(--f-num); text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-3); } .ds-field input { width: 84px; height: 40px; padding: 2px 8px 0; border: 1.5px solid var(--ink); border-radius: 0; background: var(--label); color: var(--ink); font: 800 21px/1 var(--f-num); font-variant-numeric: tabular-nums; } .ds-field input:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }"
+    },
+    {
+      "name": "Полоса обмена",
+      "kind": "custom",
+      "refersTo": "swapbar",
+      "description": "Режим обмена приёмами пищи: жёлтая полоса под полосой приложения с подсказкой и кнопкой отмены.",
+      "html": "<div class=\"ds-swapbar\"><p><b>Обед, сб 31 окт.</b> Нажмите приём пищи, с которым поменять.</p><button class=\"ds-btn-sticker\">Отмена</button></div>",
+      "css": ".ds-swapbar { display: flex; align-items: center; gap: 12px; padding: 8px 12px; background: var(--sticker); color: var(--sticker-ink); box-shadow: var(--shadow); } .ds-swapbar p { flex: 1; margin: 0; font: 14px/1.3 var(--f-ui); } .ds-swapbar b { font-weight: 700; } .ds-btn-sticker { min-height: 40px; padding: 2px 14px 0; border: 1.5px solid var(--sticker-ink); border-radius: 0; background: transparent; color: var(--sticker-ink); font: 800 16px/1 var(--f-num); text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; } .ds-btn-sticker:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }"
+    },
+    {
+      "name": "Промо-ярлык тренировки",
+      "kind": "chip",
+      "refersTo": "badge-promo",
+      "description": "Красный ярлык дня тренировки.",
+      "html": "<span class=\"ds-promo\">Функциональная 13:30</span>",
+      "css": ".ds-promo { display: inline-block; padding: 3px 6px 2px; background: var(--promo); color: var(--promo-ink); font: 800 14px/1 var(--f-num); text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }"
+    },
+    {
+      "name": "Кнопка «Сегодня»",
+      "kind": "button",
+      "refersTo": "to-today",
+      "description": "Плавающая чёрная плашка, когда сегодняшний день вне экрана.",
+      "html": "<button class=\"ds-to-today\">Сегодня</button>",
+      "css": ".ds-to-today { padding: 13px 20px 11px; border: 0; border-radius: 0; background: var(--bar); color: var(--bar-ink); font: 800 17px/1 var(--f-num); text-transform: uppercase; letter-spacing: 0.06em; box-shadow: 0 4px 14px rgb(0 0 0 / 0.28); cursor: pointer; } .ds-to-today:active { opacity: 0.8; } .ds-to-today:focus-visible { outline: 2px solid var(--bar-ink); outline-offset: 2px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Полка с ценниками",
+    "overview": "План читается как стеллаж в супермаркете. День это полка, приём пищи это товар на белой этикетке, ккал стоят справа крупными сжатыми цифрами, как цена. Этикетки лежат на холодном сером стеллаже, текст печатается чёрной краской. Поверх напечатанного плана пользователь клеит жёлтые наклейки «новая цена», и по ним сразу видно, что он поменял. Тренировка отмечена красным промо-ярлыком, как акция.\n\nИнтерфейс плотный, им пользуются на ходу с iPhone в режиме PWA. Состав приёма пищи читается без раскрытий, прошедшие дни свёрнуты до названий блюд, чтобы вчера, сегодня и завтра помещались на первый экран 390×844. Иерархию дают вес шрифта, сжатые цифры и чёрные плашки положения. Скруглений, рамок карточек, эмодзи еды, колец макросов и зелёного акцента в этом мире нет.\n\nТёмная тема собрана как отдельная ночная палитра. Стеллаж почти чёрный, этикетки графитовые, жёлтые наклейки светятся, заголовок сегодняшнего дня инвертируется в светлый.",
+    "keyCharacteristics": [
+      "Полосы во всю ширину экрана: белая этикетка на сером фоне, без скруглений и теней.",
+      "Все числа набраны Sofia Sans Extra Condensed табличными цифрами, ккал стоят в правой колонке.",
+      "Жёлтый появляется только там, где пользователь что-то изменил.",
+      "Сплошной чёрный в ленте отмечает положение: полоса приложения, сегодняшний день, ближайший приём пищи.",
+      "Красный ярлык означает только день тренировки.",
+      "Тёмная тема настроена отдельно для каждого токена."
+    ],
+    "rules": [
+      {
+        "name": "Правило наклейки",
+        "body": "Жёлтый означает только изменение пользователя: наклейка на строке приёма пищи, наклейка на итоге дня, полоса обмена и исходная строка обмена. Кратковременные отклики (выделение текста, кнопка «Отменить» в тосте) берут тот же жёлтый и гаснут сами. Других постоянных жёлтых элементов нет.",
+        "section": "colors"
+      },
+      {
+        "name": "Правило чёрной краски",
+        "body": "В ленте сплошной чёрный фон стоит у полосы приложения, заголовка сегодняшнего дня и метки времени ближайшего приёма пищи. Плавающие элементы (кнопка «Сегодня», тост) берут цвет полосы приложения. Вне ленты чёрная заливка бывает у главной кнопки редактора и шапки таблицы справки.",
+        "section": "colors"
+      },
+      {
+        "name": "Правило промо-ярлыка",
+        "body": "Красный стоит только на ярлыке тренировки. День отдыха подписан обычным приглушённым текстом «Отдых».",
+        "section": "colors"
+      },
+      {
+        "name": "Правило ночной палитры",
+        "body": "Каждый цвет, который меняется в тёмной теме, получает своё ночное значение в блоке `prefers-color-scheme: dark`. Инверсия и полупрозрачные наложения цвета не заменяют.",
+        "section": "colors"
+      },
+      {
+        "name": "Правило ценника",
+        "body": "Каждое число (ккал, дата, время, вес) набрано Sofia Sans Extra Condensed с `font-variant-numeric: tabular-nums`, чтобы цифры стояли колонкой. Ккал всегда весом 900.",
+        "section": "typography"
+      },
+      {
+        "name": "Правило одного кегля состава",
+        "body": "Состав приёма пищи набран 14.5px в любом состоянии строки (обычная, изменённая, убранная, раскрытая, свёрнутая). Иерархия внутри строки строится весом и сжатыми цифрами.",
+        "section": "typography"
+      },
+      {
+        "name": "Правило цены справа",
+        "body": "Ккал стоят в правой колонке, выровненные по правому краю, как цена на полочном ценнике. Старая цифра плана стоит рядом с новой и зачёркнута.",
+        "section": "layout"
+      },
+      {
+        "name": "Правило свёрнутого вчера",
+        "body": "Прошедшие дни показывают по одной строке на приём пищи (название блюда и ккал), чтобы вчера, сегодня и завтра помещались на первый экран.",
+        "section": "layout"
+      },
+      {
+        "name": "Правило бумаги",
+        "body": "Тень есть только у наклеенного и у парящего. Этикетка лежит на стеллаже плоско.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do ставить ккал в правую колонку с выравниванием вправо, Sofia Sans Extra Condensed 900 табличными цифрами.",
+      "Do показывать правку жёлтой наклейкой (`sticker`) поверх строки и зачёркнутую цифру плана рядом с новой.",
+      "Do строить новые экраны из белых полос (`label`) на сером стеллаже (`ground`) с боковыми полями 12px и линейками 1px.",
+      "Do набирать кнопки, ярлыки и заголовки Sofia Sans Extra Condensed 800 прописными с разрядкой 0.01-0.08em.",
+      "Do задавать каждому новому цвету ночное значение в блоке `prefers-color-scheme: dark`.",
+      "Do держать нажимаемые элементы не меньше 40px по высоте и иконки-кнопки 44×44."
+    ],
+    "donts": [
+      "Don't скруглять углы: кнопки, поля, ярлыки и полосы прямоугольные (0px).",
+      "Don't использовать белые скруглённые карточки, зелёный акцент, эмодзи еды и кольца макросов.",
+      "Don't красить жёлтым то, что пользователь не менял.",
+      "Don't ставить промо-красный куда-либо, кроме ярлыка тренировки.",
+      "Don't добавлять тень полосам дней, строкам и карточкам рецептов; тень есть только у наклейки и плавающих элементов.",
+      "Don't менять кегль состава между состояниями строки.",
+      "Don't набирать числа системным шрифтом."
+    ]
+  }
+}

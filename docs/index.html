@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>План питания</title>
+<meta name="description" content="План питания и тренировок, недели 8–23 (12 октября 2026 - 31 января 2027)">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="План">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="preload" href="fonts/sofia-sans-xcond-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/sofia-sans-xcond-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body data-view="plan">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v15H5.5A1.5 1.5 0 0 0 4 20.5zM20 5.5A1.5 1.5 0 0 0 18.5 4H13v15h5.5a1.5 1.5 0 0 1 1.5 1.5zM4 20.5V5.5M20 20.5V5.5"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.6v.4"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11" height="11"/><path d="M15.5 5.5V4.5h-11v11h1"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-cup" viewBox="0 0 24 24"><path d="M5 9h11v5a5 5 0 0 1-5 5h-1a5 5 0 0 1-5-5zM16 10.5h1.5a2.5 2.5 0 0 1 0 5H16M8.5 3.5v2M12.5 3.5v2"/></symbol>
+</svg>
+
+<header class="bar">
+  <div class="bar-in">
+    <label class="week" data-for="plan">
+      <span class="week-n" id="week-n">Неделя</span>
+      <span class="week-r" id="week-r"></span>
+      <svg class="week-ic" aria-hidden="true"><use href="#i-down"/></svg>
+      <select id="week-select" aria-label="Перейти к неделе"></select>
+    </label>
+    <a class="icon-btn" data-for="plan" href="#recipes" aria-label="Рецепты"><svg aria-hidden="true"><use href="#i-book"/></svg></a>
+    <a class="icon-btn" data-for="plan" href="#info" aria-label="Справка"><svg aria-hidden="true"><use href="#i-info"/></svg></a>
+    <a class="back" data-for="sub" href="#" aria-label="К плану"><svg aria-hidden="true"><use href="#i-back"/></svg><span id="sub-title"></span></a>
+  </div>
+</header>
+
+<main>
+  <section class="view" id="view-plan">
+    <div class="swapbar" id="swapbar" hidden>
+      <p id="swapbar-text"></p>
+      <button class="btn" type="button" id="swap-cancel">Отмена</button>
+    </div>
+    <div class="feed" id="feed"></div>
+  </section>
+
+  <section class="view" id="view-recipes" hidden>
+    <nav class="jump" id="recipe-jump" aria-label="Разделы рецептов"></nav>
+    <div class="page" id="recipe-list"></div>
+  </section>
+
+  <section class="view" id="view-info" hidden>
+    <div class="page prose">
+      <h1>План питания · 12 октября 2026 — 31 января 2027</h1>
+      <p class="lead">Рамат-Ган · цель: 55 → 51 кг · недели 8–23 · 3–4 тренировки в неделю</p>
+
+      <p class="callout"><strong>Ориентиры.</strong> День без тренировки — ≈1300 ккал. День с тренировкой — ≈1500 ккал: это тот же день плюс перекус S4 перед тренировкой. В среднем выходит ≈1410 ккал в день и ≈0,3 кг в неделю, поэтому цель — примерно к концу января. Если тренировка отменилась, S4 просто не ешьте.</p>
+
+      <h2>Тренировки и режим</h2>
+      <p>Подъём 8:00/8:30, сон 00:00/00:30. Если у приёма пищи два времени, верхнее для подъёма в 8:00, нижнее для 8:30.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>День</th><th>Тренировка</th><th>Перекус S4 (≈190 ккал)</th></tr></thead>
+          <tbody>
+            <tr><th>пн</th><td>BodyPump · 20:00</td><td>18:30</td></tr>
+            <tr><th>ср</th><td>Cycling · 18:00</td><td>16:30</td></tr>
+            <tr><th>пт</th><td>Функциональная · 13:30</td><td>12:00</td></tr>
+            <tr><th>сб</th><td>HIIT · 10:00</td><td>8:30, сразу после подъёма; завтрак — после тренировки</td></tr>
+            <tr><th>чт</th><td>Иногда: бег 30–40 мин или <bdi lang="he" dir="rtl">עיצוב</bdi> в 18:00</td><td>За 1–1,5 часа до тренировки — только если она есть</td></tr>
+            <tr><th>вт, вс</th><td>Отдых</td><td>—</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>Из чего состоит день</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Приём</th><th class="num">ккал</th><th>Варианты</th></tr></thead>
+          <tbody>
+            <tr><th>Завтрак + кофе</th><td class="num">≈340</td><td>B1–B7</td></tr>
+            <tr><th>Обед + кофе</th><td class="num">≈410</td><td>M1–M7</td></tr>
+            <tr><th>Перекус</th><td class="num">≈150</td><td>S1, S2, S3, S5</td></tr>
+            <tr><th>Ужин</th><td class="num">≈295</td><td>D1–D5</td></tr>
+            <tr><th>Вечер</th><td class="num">≈85</td><td>E1 кефир · E2 тёмный шоколад · E3 чай с «Марией» · E4 батончик Fitness</td></tr>
+            <tr><th>Десерт-вечер</th><td class="num">≈190–230</td><td>F1–F3 с Fitness, K1 чипсы, K2 попкорн — вместо перекуса и E</td></tr>
+            <tr><th>Кофе × 2</th><td class="num">≈24</td><td>После завтрака и после обеда, в каждую чашку 20 мл молока 3%</td></tr>
+            <tr><th>Перед тренировкой</th><td class="num">≈170–190</td><td>S4 банан + хлеб или F4 банан + Fitness — только в день тренировки</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">Блюда внутри одной группы взаимозаменяемы: разница не больше 20 ккал. Если не хочется того, что стоит в календаре, берите любое блюдо той же группы.</p>
+
+      <h2>Сладкое, кино и что купить</h2>
+      <p><strong>Что купить — есть в «Кешет» и в обычных супермаркетах:</strong></p>
+      <ul>
+        <li><strong>Тёмный шоколад:</strong> Lindt Excellence 70% (на иврите — <bdi lang="he" dir="rtl">לינדט אקסלנס מריר</bdi>) — мягкий, не горчит. Дешевле — Ritter Sport 70% (на иврите — <bdi lang="he" dir="rtl">ריטר ספורט מריר</bdi>). Без орехов. Порция E2 — 15 г ≈ 87 ккал: один раз взвесь и запомни, сколько это долек.</li>
+        <li><strong>Печенье:</strong> Gullón María, классическая (на иврите — <bdi lang="he" dir="rtl">גולון מריה</bdi>) — 3 шт. ≈ 19 г ≈ 83 ккал: короткий состав, подсолнечное масло, вкус молочного печенья. Запасные варианты: Lotus с карамелью (на иврите — <bdi lang="he" dir="rtl">לוטוס</bdi>) — 2 шт. ≈ 77 ккал; Gullón Zero «Breakfast» без сахара — 2 шт. ≈ 74 ккал, но в нём мальтит, поэтому не больше 2 за раз.</li>
+        <li><strong>Батончики Nestlé Fitness:</strong> 3–4 в неделю (в коробке 6).</li>
+      </ul>
+      <p><strong>Как устроены вечера:</strong></p>
+      <ul>
+        <li><strong>Десерт-вечер — только в дни тренировок.</strong> В этот день нет дневного перекуса, а вместо вечернего E — десерт ≈190–230 ккал: F1–F3 с батончиком Fitness, чипсы K1 или попкорн K2.</li>
+        <li><strong>Чипсы — каждую субботу:</strong> Pringles 40 г (≈20 шт.). В базовой неделе без тренировок — 30 г, а днём только яблоко.</li>
+        <li><strong>Попкорн — 3 пачки = 6 вечеров по ½ пачки, примерно раз в 1,5 недели:</strong> 23 окт, 2 ноя, 13 ноя, 23 ноя, 4 дек, 14 дек. Вторую половину пачки сразу пересыпь в герметичный контейнер до следующего раза.</li>
+        <li><strong>Перед cycling по средам — F4:</strong> банан + батончик Fitness вместо банана с хлебом.</li>
+      </ul>
+
+      <h2>Вода</h2>
+      <ul>
+        <li><strong>Цель:</strong> 7 стаканов по 250 мл (≈1,8 л) в день отдыха и 9 стаканов (≈2,3 л) в день тренировки. Чай и кефир считаются, кофе — нет.</li>
+        <li><strong>Как не забывать:</strong> стакан сразу после подъёма, стакан к каждому приёму пищи, бутылка 0,5 л на тренировку. Сколько стаканов нужно в конкретный день, написано в заголовке дня.</li>
+      </ul>
+
+      <h2>Продукты и ограничения</h2>
+      <ul>
+        <li><strong>Не используются:</strong> тунец, белая рыба, брокколи, баклажаны, грибы, сладкий перец, орегано, тушёные овощи. Грибной порошок — можно: в соусы, суп, омлет.</li>
+        <li><strong>Острое не добавляем.</strong> Чеснок и лимонный сок — можно, понемногу.</li>
+        <li><strong>Овощи</strong> — свежие огурцы и помидоры. Картофель и батат — только запечённые (или варёные в супе D5).</li>
+        <li><strong>Продукты:</strong> хлеб и пита цельнозерновые; творог 5%, йогурт 1,5%, молоко 3%, кефир 1,5%. Если калорийность на вашей упаковке заметно другая — этикетка важнее расчёта.</li>
+      </ul>
+
+      <h2>Как читать граммовки</h2>
+      <p>Птица, картофель и батат указаны в сыром виде, крупы и макароны — в сухом. Рядом — примерный вес после готовки.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Продукт</th><th>Указано</th><th>После готовки</th></tr></thead>
+          <tbody>
+            <tr><th>Куриное филе</th><td>сырое</td><td>× 0,75 (120 г → ≈90 г)</td></tr>
+            <tr><th>Картофель, батат</th><td>сырой</td><td>× 0,8 (230 г → ≈184 г)</td></tr>
+            <tr><th>Рис</th><td>сухой</td><td>× 3 (50 г → ≈150 г)</td></tr>
+            <tr><th>Гречка</th><td>сухая</td><td>× 3,7 (45 г → ≈167 г)</td></tr>
+            <tr><th>Макароны, кускус</th><td>сухие</td><td>× 2,5 (50 г → ≈125 г)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">Если готовите партию на несколько дней, взвесьте всё до и после готовки и делите готовое пропорционально сырым порциям.</p>
+
+      <h2>Базовая неделя · без тренировок</h2>
+      <p id="base-note"></p>
+    </div>
+    <div id="base-week"></div>
+  </section>
+</main>
+
+<button class="to-today" type="button" id="to-today" hidden>Сегодня</button>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden><span id="toast-text"></span><button type="button" id="toast-action" hidden></button></div>
+
+<script src="plan.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
