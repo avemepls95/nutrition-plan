@@ -5,28 +5,41 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>План питания</title>
 <meta name="description" content="План питания и тренировок, недели 8–23 (12 октября 2026 - 31 января 2027)">
-<meta name="theme-color" content="#000000">
+<meta name="theme-color" content="#2b5b5e">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="План">
 <meta name="format-detection" content="telephone=no">
+<script>
+  // Тема выставляется до отрисовки, чтобы экран не мигал. По умолчанию светлая.
+  (function () {
+    var pref = "light";
+    try { pref = JSON.parse(localStorage.getItem("np.v1.theme")) || "light"; } catch (e) {}
+    var dark = pref === "dark" || (pref === "auto" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    document.documentElement.dataset.theme = dark ? "dark" : "light";
+    document.querySelector('meta[name="theme-color"]').content = dark ? "#16302f" : "#2b5b5e";
+  })();
+</script>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="icon" href="icons/icon-192.png" type="image/png">
-<link rel="preload" href="fonts/sofia-sans-xcond-latin.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="preload" href="fonts/sofia-sans-xcond-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body data-view="plan">
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v15H5.5A1.5 1.5 0 0 0 4 20.5zM20 5.5A1.5 1.5 0 0 0 18.5 4H13v15h5.5a1.5 1.5 0 0 1 1.5 1.5zM4 20.5V5.5M20 20.5V5.5"/></symbol>
-  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.6v.4"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M12 6.5C10.4 5 8.2 4.5 4.5 4.5v13c3.7 0 5.9.5 7.5 2 1.6-1.5 3.8-2 7.5-2v-13c-3.7 0-5.9.5-7.5 2zM12 6.5v13"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.75v.01"/></symbol>
+  <symbol id="i-scale" viewBox="0 0 24 24"><path d="M7.5 9.5h9a2 2 0 0 1 2 1.8l.7 6.5a2 2 0 0 1-2 2.2H6.8a2 2 0 0 1-2-2.2l.7-6.5a2 2 0 0 1 2-1.8zM7 5h10M12 5v4.5"/><circle cx="12" cy="15" r="2.3"/></symbol>
   <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
   <symbol id="i-down" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></symbol>
-  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11" height="11"/><path d="M15.5 5.5V4.5h-11v11h1"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11" height="11" rx="2.5"/><path d="M15.5 8.5v-2a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
-  <symbol id="i-cup" viewBox="0 0 24 24"><path d="M5 9h11v5a5 5 0 0 1-5 5h-1a5 5 0 0 1-5-5zM16 10.5h1.5a2.5 2.5 0 0 1 0 5H16M8.5 3.5v2M12.5 3.5v2"/></symbol>
+  <symbol id="i-cup" viewBox="0 0 24 24"><path d="M5 9.5h11v4.5a5 5 0 0 1-5 5h-1a5 5 0 0 1-5-5zM16 10.5h1.5a2.5 2.5 0 0 1 0 5H16M8.5 3.5v2M12.5 3.5v2"/></symbol>
+  <symbol id="i-drop" viewBox="0 0 24 24"><path d="M12 3.5c-3 3.6-6 7-6 10.5a6 6 0 0 0 12 0c0-3.5-3-6.9-6-10.5z"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 24 24"><path d="M6 12h12"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 6v12M6 12h12"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24"><path d="M5 9.5h9.5a4.5 4.5 0 0 1 0 9H9M8.5 6L5 9.5 8.5 13"/></symbol>
 </svg>
 
 <header class="bar">
@@ -37,6 +50,7 @@
       <svg class="week-ic" aria-hidden="true"><use href="#i-down"/></svg>
       <select id="week-select" aria-label="Перейти к неделе"></select>
     </label>
+    <a class="icon-btn" data-for="plan" href="#products" aria-label="Калорийность продуктов"><svg aria-hidden="true"><use href="#i-scale"/></svg></a>
     <a class="icon-btn" data-for="plan" href="#recipes" aria-label="Рецепты"><svg aria-hidden="true"><use href="#i-book"/></svg></a>
     <a class="icon-btn" data-for="plan" href="#info" aria-label="Справка"><svg aria-hidden="true"><use href="#i-info"/></svg></a>
     <a class="back" data-for="sub" href="#" aria-label="К плану"><svg aria-hidden="true"><use href="#i-back"/></svg><span id="sub-title"></span></a>
@@ -55,6 +69,13 @@
   <section class="view" id="view-recipes" hidden>
     <nav class="jump" id="recipe-jump" aria-label="Разделы рецептов"></nav>
     <div class="page" id="recipe-list"></div>
+  </section>
+
+  <section class="view" id="view-products" hidden>
+    <div class="page">
+      <p class="f-intro">Когда меняете количество продукта в приёме пищи, ккал пересчитываются по этим цифрам. Они подобраны по плану: продукты каждого блюда в сумме дают его ккал. Если на вашей упаковке другая калорийность, впишите её.</p>
+      <ul class="f-list" id="food-list"></ul>
+    </div>
   </section>
 
   <section class="view" id="view-info" hidden>
@@ -133,15 +154,22 @@
         <table>
           <thead><tr><th>Продукт</th><th>Указано</th><th>После готовки</th></tr></thead>
           <tbody>
-            <tr><th>Куриное филе</th><td>сырое</td><td>× 0,75 (120 г → ≈90 г)</td></tr>
-            <tr><th>Картофель, батат</th><td>сырой</td><td>× 0,8 (230 г → ≈184 г)</td></tr>
-            <tr><th>Рис</th><td>сухой</td><td>× 3 (50 г → ≈150 г)</td></tr>
-            <tr><th>Гречка</th><td>сухая</td><td>× 3,7 (45 г → ≈167 г)</td></tr>
-            <tr><th>Макароны, кускус</th><td>сухие</td><td>× 2,5 (50 г → ≈125 г)</td></tr>
+            <tr><th>Куриное филе</th><td>сырое</td><td>× 0,75 (120&nbsp;г → ≈90&nbsp;г)</td></tr>
+            <tr><th>Картофель, батат</th><td>сырой</td><td>× 0,8 (230&nbsp;г → ≈184&nbsp;г)</td></tr>
+            <tr><th>Рис</th><td>сухой</td><td>× 3 (50&nbsp;г → ≈150&nbsp;г)</td></tr>
+            <tr><th>Гречка</th><td>сухая</td><td>× 3,7 (45&nbsp;г → ≈167&nbsp;г)</td></tr>
+            <tr><th>Макароны, кускус</th><td>сухие</td><td>× 2,5 (50&nbsp;г → ≈125&nbsp;г)</td></tr>
           </tbody>
         </table>
       </div>
       <p class="note">Если готовите партию на несколько дней, взвесьте всё до и после готовки и делите готовое пропорционально сырым порциям.</p>
+
+      <h2>Оформление</h2>
+      <div class="seg" role="group" aria-label="Тема">
+        <button type="button" data-theme-set="light">Светлая</button>
+        <button type="button" data-theme-set="dark">Тёмная</button>
+        <button type="button" data-theme-set="auto">Как в системе</button>
+      </div>
 
       <h2>Базовая неделя · без тренировок</h2>
       <p id="base-note"></p>
@@ -154,6 +182,7 @@
 <div class="toast" id="toast" role="status" aria-live="polite" hidden><span id="toast-text"></span><button type="button" id="toast-action" hidden></button></div>
 
 <script src="plan.js"></script>
+<script src="foods.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

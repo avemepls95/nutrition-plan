@@ -2,8 +2,11 @@
   "use strict";
 
   const PLAN = window.PLAN;
+  const FOODS = window.FOODS;
   const EDITS_KEY = "np.v1.edits";
   const WEIGHTS_KEY = "np.v1.weights";
+  const KCAL_KEY = "np.v1.kcal";
+  const THEME_KEY = "np.v1.theme";
 
   const MON_SHORT = ["янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
   const WD = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
@@ -12,6 +15,7 @@
   const PRE_TRAINING = new Set(["S4", "F4"]);
   // По справке плана «Кофе × 2 ≈24 ккал».
   const COFFEE_KCAL = 12;
+  const BAR_COLOR = { light: "#2b5b5e", dark: "#16302f" };
 
   const CODE_RE = /^\s*([A-Z]{1,2}\d{1,2})\s*·\s*/;
   const KCAL_RE = /^≈?\s*(\d+)\s*ккал\.?\s*/;
@@ -21,12 +25,23 @@
   const NOTE_RE = /\.\s+(?=[А-ЯЁA-Z])/;
   const HEBREW_RE = /\p{Script=Hebrew}+(?:\s+\p{Script=Hebrew}+)*/gu;
   const UNIT_RE = /(\d)\s+(г|мл|шт\.|ч\. л\.|ст\. л\.|кг|л)(?=[\s.,;)]|$)/g;
-  const PLAIN_COFFEE = "20 мл 3%";
 
   const $ = (sel, root = document) => root.querySelector(sel);
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
   const icon = (id) => `<svg aria-hidden="true"><use href="#${id}"/></svg>`;
+  const plural = (n, one, few, many) => {
+    const t = n % 100;
+    if (t >= 11 && t <= 14) return many;
+    return n % 10 === 1 ? one : n % 10 >= 2 && n % 10 <= 4 ? few : many;
+  };
+  // Число для поля ввода: «12,5», без «½». Количество хранится с той же точностью, что и в тексте состава.
+  const round1 = (n) => Math.round(n * 10) / 10;
+  const numText = (n) => String(round1(n)).replace(".", ",");
+  const readNum = (s) => {
+    const v = Number(String(s).trim().replace(",", "."));
+    return String(s).trim() && Number.isFinite(v) && v >= 0 ? v : null;
+  };
 
   function load(key) {
     try {
@@ -47,6 +62,25 @@
 
   const edits = Object.fromEntries(Object.entries(load(EDITS_KEY)).filter(([, e]) => typeof e?.t === "string"));
   const weights = load(WEIGHTS_KEY);
+  // Своя калорийность продуктов: { ключ: { k: ккал, n: название, u: единица } }.
+  const foodKcal = Object.fromEntries(Object.entries(load(KCAL_KEY)).filter(([, v]) => Number.isFinite(v?.k)));
+
+  /* Тема */
+
+  const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
+  let themePref = (() => {
+    const v = load(THEME_KEY);
+    return v === "dark" || v === "auto" ? v : "light";
+  })();
+
+  function applyTheme() {
+    const dark = themePref === "dark" || (themePref === "auto" && darkQuery.matches);
+    document.documentElement.dataset.theme = dark ? "dark" : "light";
+    $('meta[name="theme-color"]').content = BAR_COLOR[dark ? "dark" : "light"];
+    for (const b of document.querySelectorAll("[data-theme-set]")) b.setAttribute("aria-pressed", String(b.dataset.themeSet === themePref));
+  }
+
+  darkQuery.addEventListener?.("change", applyTheme);
 
   /* Даты */
 
@@ -118,19 +152,21 @@
     return `${code ? `${code} · ` : ""}${kcal ? `≈${kcal} ккал. ` : ""}${body}`;
   }
 
-  function parse(text, withNote) {
+  function cutNote(rest) {
+    const cut = rest.search(NOTE_RE);
+    return cut < 0 ? { body: rest, note: "" } : { body: rest.slice(0, cut + 1), note: rest.slice(cut + 1).trim() };
+  }
+
+  // Пояснения из плана («Десерт-вечер: …») уходят из строки в раскрытую часть и после правки количества.
+  const planNotes = new Set(PLAN.texts.map((t) => cutNote(splitHead(t).rest.replace(COFFEE_RE, "").trim()).note).filter(Boolean));
+
+  function parse(text, plain) {
     const { code, kcal, rest: head } = splitHead(text);
-    const coffee = [...head.matchAll(COFFEE_RE)].map((m) => `${m[1]} мл${m[2] ? ` ${m[2]}%` : ""}`);
-    let rest = head.replace(COFFEE_RE, "").trim();
-    let note = "";
-    if (withNote) {
-      const cut = rest.search(NOTE_RE);
-      if (cut >= 0) {
-        note = rest.slice(cut + 1).trim();
-        rest = rest.slice(0, cut + 1);
-      }
-    }
-    return { code, kcal, body: rest, coffee, note };
+    const coffee = [...head.matchAll(COFFEE_RE)].map((m) => ({ ml: m[1], fat: m[2] || "" }));
+    const rest = head.replace(COFFEE_RE, "").trim();
+    const split = cutNote(rest);
+    if (plain || planNotes.has(split.note)) return { code, kcal, coffee, ...split };
+    return { code, kcal, coffee, body: rest, note: "" };
   }
 
   const copyLine = (text) => text.replace(COFFEE_RE, "").replace(/\s{2,}/g, " ").trim();
@@ -147,22 +183,24 @@
     return "EFK".includes(code[0]) ? "evening" : code[0];
   }
 
+  const planKcal = (meal) => splitHead(meal.text).kcal || 0;
+
   // Ккал правки без числа считаются как в плане, убранный приём пищи даёт 0.
-  function dishKcal(meal) {
-    const plan = splitHead(meal.text).kcal || 0;
-    const edit = edits[meal.key];
-    if (!edit) return plan;
-    if (!edit.t.trim()) return 0;
-    return splitHead(edit.t).kcal ?? plan;
+  function kcalOfText(meal, text) {
+    if (text === meal.text) return planKcal(meal);
+    if (!text.trim()) return 0;
+    return splitHead(text).kcal ?? planKcal(meal);
   }
 
+  const dishKcal = (meal) => kcalOfText(meal, current(meal));
   const cupsKcal = (text) => COFFEE_KCAL * (text.match(COFFEE_RE) || []).length;
 
   // Итог из PDF уже включает кофе, поэтому к нему прибавляется только разница с планом.
-  const dayTotal = (day) => day.kcal + day.meals.reduce(
-    (sum, m) => sum + dishKcal(m) + cupsKcal(current(m)) - (splitHead(m.text).kcal || 0) - cupsKcal(m.text),
-    0,
-  );
+  // override: текст одного приёма пищи, ещё не сохранённый в редакторе.
+  const dayTotal = (day, override) => day.kcal + day.meals.reduce((sum, m) => {
+    const text = override && override.key === m.key ? override.text : current(m);
+    return sum + kcalOfText(m, text) + cupsKcal(text) - planKcal(m) - cupsKcal(m.text);
+  }, 0);
 
   function relLabel(iso) {
     if (iso === today) return "сегодня";
@@ -188,6 +226,29 @@
     }) || null;
   }
 
+  /* Калорийность продуктов */
+
+  const UNIT_LABEL = { г: "на 100 г", мл: "на 100 мл", "шт.": "за 1 шт.", пачка: "за пачку" };
+
+  const defaultKcal = new Map(FOODS.DEFAULTS.map(([key, name, unit, kcal, note]) => [FOODS.keyOf(key), { name, unit, kcal, def: kcal, note }]));
+
+  // Калорийность по умолчанию из foods.js и то, что пользователь вписал сам. Ключ из FOODS.foodId.
+  function kcalTable() {
+    const table = new Map([...defaultKcal].map(([id, entry]) => [id, { ...entry }]));
+    for (const [id, v] of Object.entries(foodKcal)) {
+      const entry = table.get(id);
+      if (entry) entry.kcal = v.k;
+      else table.set(id, { name: v.n || id.split("|")[0], unit: v.u || "г", kcal: v.k, def: null });
+    }
+    return table;
+  }
+
+  function setFoodKcal(id, name, unit, value) {
+    if (value === null || value === defaultKcal.get(id)?.kcal) delete foodKcal[id];
+    else foodKcal[id] = { k: value, n: name, u: unit };
+    if (!store(KCAL_KEY, foodKcal)) toast("Не получилось сохранить калорийность на устройстве");
+  }
+
   /* Разметка */
 
   let nextKey = null;
@@ -195,6 +256,9 @@
   const withHebrew = (s) => esc(s).replace(HEBREW_RE, (m) => `<bdi lang="he" dir="rtl">${m}</bdi>`);
   // «100 г» не разрывается на две строки.
   const nbspUnits = (html) => html.replace(UNIT_RE, (_, n, unit) => `${n}\xa0${unit.replace(". ", ".\xa0")}`);
+
+  // Кофе стоит под составом отдельной плашкой, чтобы было видно, сколько молока.
+  const coffeeHtml = (c) => `<span class="coffee">${icon("i-cup")}<span>кофе + <b>${esc(c.ml)}\xa0мл</b> молока${c.fat ? ` ${esc(c.fat)}%` : ""}</span></span>`;
 
   function mealHtml(meal) {
     const edit = edits[meal.key];
@@ -210,20 +274,14 @@
 
     let body = p.code ? `<span class="m-sku">${esc(p.code)}</span> ` : "";
     body += empty ? `<span class="m-empty">убрано</span>` : nbspUnits(esc(p.body));
-    // Обычный кофе стоит значком под ккал и не занимает строку текста, другой объём молока виден в тексте.
-    let cup = "";
-    for (const c of p.coffee) {
-      if (c === PLAIN_COFFEE && !cup) cup = `<span class="coffee">${icon("i-cup")}<span class="visually-hidden">кофе, молоко ${esc(c)}</span></span>`;
-      else body += ` <span class="coffee">${icon("i-cup")}<span class="visually-hidden">кофе, молоко </span>${esc(c)}</span>`;
-    }
     const source = edit?.f && meals.get(edit.f);
     if (edit) body += `<span class="m-from">${source ? `из ${esc(dayShort(source.day))}` : "правка"}</span>`;
     const name = empty ? "убрано" : plain && recipe ? recipe.name : p.body;
 
     let price = "";
-    const planKcal = splitHead(meal.text).kcal;
-    if (edit && planKcal != null && dishKcal(meal) !== planKcal) {
-      price += `<s class="m-was"><span class="visually-hidden">в плане </span>${planKcal}</s>`;
+    const plan = splitHead(meal.text).kcal;
+    if (edit && plan != null && dishKcal(meal) !== plan) {
+      price += `<s class="m-was"><span class="visually-hidden">в плане </span>${plan}</s>`;
     }
     if (p.kcal != null && !empty) price += `<b>${p.kcal}</b><span class="visually-hidden"> ккал</span>`;
     if (price) price = `<span class="m-kcal">${price}</span>`;
@@ -231,8 +289,8 @@
     return `<li class="${cls.join(" ")}" data-key="${esc(meal.key)}">
       <button class="meal-row" type="button" aria-expanded="false">
         <span class="m-time"><span>${esc(t1)}</span>${t2 ? `<span class="alt">${esc(t2)}</span>` : ""}</span>
-        <span class="m-text"><span class="m-body">${body}</span><span class="m-name">${esc(name)}</span></span>
-        <span class="m-price">${price}${cup}</span>
+        <span class="m-text"><span class="m-body">${body}</span><span class="m-name">${esc(name)}</span><span class="m-extra">${p.coffee.map(coffeeHtml).join("")}</span></span>
+        <span class="m-price">${price}</span>
       </button>
     </li>`;
   }
@@ -253,31 +311,29 @@
     } else {
       const d = dateOf(day.iso);
       const rel = relLabel(day.iso);
-      date = `<span class="d-date"><span class="d-num">${d.getDate()}</span><span class="d-mon">${MON_SHORT[d.getMonth()]}</span></span>`;
-      title = rel ? `<span>${rel}</span><span class="d-wd">${WD_SHORT[d.getDay()]}</span>` : `<span>${WD[d.getDay()]}</span>`;
+      date = `<span class="d-date" aria-hidden="true"><span class="d-num">${d.getDate()}</span><span class="d-mon">${MON_SHORT[d.getMonth()]}</span></span>`;
+      title = rel ? `<span>${cap(rel)}</span><span class="d-wd">${WD_SHORT[d.getDay()]}</span>` : `<span>${cap(WD[d.getDay()])}</span>`;
     }
     if (past) title += `<svg class="d-more" aria-hidden="true"><use href="#i-down"/></svg>`;
 
-    const sub = day.load === "Отдых"
-      ? `Отдых${day.note ? ` · ${withHebrew(day.note)}` : ""}`
+    const load = day.load === "Отдых"
+      ? `<span>Отдых${day.note ? ` · ${withHebrew(day.note)}` : ""}</span>`
       : `<span class="badge">${esc(day.load)} ${esc(day.time)}</span>`;
-    const main = `${date}<span class="d-main"><span class="d-title">${title}</span><span class="d-sub">${sub}</span></span>`;
-    const id = past
-      ? `<button class="d-id" type="button" data-toggle aria-expanded="${!brief}">${main}</button>`
-      : `<div class="d-id${isBase ? " no-date" : ""}">${main}</div>`;
+    const water = `<span class="d-water">${icon("i-drop")}${day.water} ${plural(day.water, "стакан", "стакана", "стаканов")}<span class="visually-hidden"> воды</span></span>`;
 
     const total = dayTotal(day);
     const changed = total !== day.kcal;
     const what = isBase ? day.name.toLowerCase() : dayShort(day);
+    // Прошедший день сворачивается нажатием на любое место заголовка: кнопка растянута под ним.
+    const toggle = past ? `<button class="d-toggle" type="button" data-toggle aria-expanded="${!brief}" aria-label="${esc(cap(what))}: состав"></button>` : "";
 
     return `<section class="${cls.join(" ")}" data-day="${esc(day.id)}" aria-label="${esc(cap(what))}">
-      <header class="day-head">
-        ${id}
-        <span class="d-total${changed ? " is-changed" : ""}">
-          <span class="d-kcal">${changed ? `<s class="d-was"><span class="visually-hidden">в плане </span>${day.kcal}</s>` : ""}<b>${total}</b><small>ккал</small></span>
-          <span class="d-water">${day.water} стаканов воды</span>
-        </span>
-        <button class="copy" type="button" aria-label="Скопировать состав: ${esc(what)}">${icon("i-copy")}</button>
+      <header class="day-head${isBase ? " no-date" : ""}">
+        ${toggle}${date}
+        <span class="d-title">${title}</span>
+        <span class="d-total${changed ? " is-changed" : ""}">${changed ? `<s class="d-was"><span class="visually-hidden">в плане </span>${day.kcal}</s>` : ""}<b>${total}</b><small>ккал</small></span>
+        <button class="copy" type="button" aria-label="Скопировать состав за день: ${esc(what)}">${icon("i-copy")}</button>
+        <span class="d-sub">${load}${water}</span>
       </header>
       <ol class="meals">${day.meals.map(mealHtml).join("")}</ol>
     </section>`;
@@ -292,34 +348,40 @@
 
   function panelHtml(meal) {
     const edit = edits[meal.key];
-    const p = parse(current(meal), isPlain(meal));
+    const text = current(meal);
+    const p = parse(text, isPlain(meal));
     const recipe = p.code && recipes.get(p.code);
     const parts = [];
-    if (recipe) parts.push(`<p class="p-title"><span class="m-sku">${esc(recipe.code)}</span>${esc(recipe.name)}</p>`);
+    if (recipe) parts.push(`<p class="p-title">${esc(recipe.name)}</p>`);
     if (p.note) parts.push(`<p class="p-note">${esc(p.note)}</p>`);
     if (recipe) for (const step of recipe.steps) parts.push(`<p>${esc(step)}</p>`);
     if (edit) parts.push(`<p class="p-orig"><b>В плане</b>${esc(meal.text)}</p>`);
     const actions = [`<button class="btn" type="button" data-act="edit">Изменить</button>`];
     if (meal.day.iso) actions.push(`<button class="btn" type="button" data-act="swap">Поменять</button>`);
+    if (text.trim()) actions.push(`<button class="btn" type="button" data-act="copy">${icon("i-copy")}Копировать</button>`);
     if (edit) actions.push(`<button class="btn" type="button" data-act="reset">Как в плане</button>`);
     return `<div class="meal-panel">${parts.join("")}<div class="p-actions">${actions.join("")}</div></div>`;
   }
 
+  // У убранного приёма пищи редактор открывается с составом из плана.
+  const editSource = (meal) => (current(meal).trim() ? current(meal) : meal.text);
+
   function editorHtml(meal) {
-    const text = current(meal);
-    // У убранного приёма пищи код и ккал подставляются из плана.
-    const { code, kcal } = splitHead(text.trim() ? text : meal.text);
-    const rest = text.trim() ? splitHead(text).rest : "";
+    const { code, kcal, rest } = splitHead(editSource(meal));
     const options = mealCodes.some((r) => r.code === code) || !code ? mealCodes : [{ code, name: "" }, ...mealCodes];
     const select = options
       .map((r) => `<option value="${esc(r.code)}"${r.code === code ? " selected" : ""}>${esc(r.code)}${r.name ? ` · ${esc(r.name)}` : ""}</option>`)
       .join("");
     return `<div class="meal-panel editor">
       <div class="ed-fields">
-        <label class="ed-field ed-code">Код<select name="code"><option value="">без кода</option>${select}</select></label>
+        <label class="ed-field ed-code">Блюдо<select name="code"><option value="">без кода</option>${select}</select></label>
         <label class="ed-field">Ккал<input name="kcal" value="${kcal ?? ""}" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" enterkeyhint="done"></label>
       </div>
-      <textarea name="comp" rows="3" enterkeyhint="done" aria-label="Состав">${esc(rest)}</textarea>
+      <p class="ed-day" aria-live="polite"></p>
+      <ul class="ed-items" aria-label="Количество продуктов"></ul>
+      <div class="ed-missing" hidden></div>
+      <label class="ed-label" for="comp-${esc(meal.key)}">Состав</label>
+      <textarea id="comp-${esc(meal.key)}" name="comp" rows="3" enterkeyhint="done">${esc(rest)}</textarea>
       <div class="p-actions">
         <button class="btn primary" type="button" data-act="save">Сохранить</button>
         <button class="btn" type="button" data-act="cancel">Отмена</button>
@@ -330,6 +392,106 @@
   function editorValue(li) {
     const kcal = $("[name=kcal]", li).value.replace(/\D/g, "");
     return compose($("[name=code]", li).value, kcal, $("[name=comp]", li).value);
+  }
+
+  /* Количество продуктов в редакторе */
+
+  // Открытый редактор: части состава, новое количество по номеру части и точка отсчёта для пересчёта ккал.
+  let ed = null;
+
+  function startEditor(li, meal) {
+    const parts = FOODS.parseBody($("[name=comp]", li).value);
+    const { kcal } = splitHead(editSource(meal));
+    ed = { key: meal.key, li, parts, qtys: [], base: { kcal, parts } };
+    // Если ккал правки получены пересчётом от блюда из плана, считаем от него же: тогда возврат к граммовкам
+    // плана даёт ровно ккал плана, без накопленного округления.
+    const origin = meals.get(edits[meal.key]?.f) || meal;
+    const head = splitHead(origin.text);
+    const originParts = FOODS.parseBody(head.rest);
+    const d = FOODS.delta(originParts, currentItems(), kcalTable());
+    if (head.kcal != null && !d.missing.length && Math.max(0, Math.round(head.kcal + d.kcal)) === kcal) {
+      ed.base = { kcal: head.kcal, parts: originParts };
+    }
+    $(".ed-items", li).innerHTML = itemsHtml();
+    refreshEditor();
+    ed.initial = editorValue(li);
+  }
+
+  const qtyOf = (i) => ed.qtys[i] ?? ed.parts[i].item.qty;
+  const unitText = (item) => (item.unit === "пачка" ? "пач." : item.unitWord);
+
+  function itemsHtml() {
+    return ed.parts.map((part, i) => {
+      if (!part.item) return "";
+      const { name } = part.item;
+      return `<li class="ed-item" data-i="${i}">
+        <span class="ed-name">${esc(name)}</span>
+        <span class="stepper">
+          <button type="button" data-step="-1" aria-label="Меньше: ${esc(name)}">${icon("i-minus")}</button>
+          <label><input value="${numText(qtyOf(i))}" inputmode="decimal" autocomplete="off" enterkeyhint="done" maxlength="6" aria-label="${esc(name)}, ${esc(part.item.unitWord)}"><span class="unit">${esc(unitText(part.item))}</span></label>
+          <button type="button" data-step="1" aria-label="Больше: ${esc(name)}">${icon("i-plus")}</button>
+        </span>
+        <span class="ed-k"></span>
+      </li>`;
+    }).join("");
+  }
+
+  const currentItems = () => ed.parts.flatMap((p, i) => (p.item ? [{ item: p.item, qty: qtyOf(i) }] : []));
+
+  // Ккал пересчитываются от точки отсчёта: сколько было у блюда и каких продуктов стало больше или меньше.
+  function refreshEditor() {
+    const li = ed.li;
+    const meal = meals.get(ed.key);
+    const table = kcalTable();
+    const baseQty = new Map();
+    for (const p of ed.base.parts) if (p.item) baseQty.set(p.item.key, (baseQty.get(p.item.key) || 0) + p.item.qty * p.item.factor);
+    const nowQty = new Map();
+    for (const { item, qty } of currentItems()) nowQty.set(item.key, (nowQty.get(item.key) || 0) + qty * item.factor);
+
+    for (const row of li.querySelectorAll(".ed-item")) {
+      const i = Number(row.dataset.i);
+      const { item } = ed.parts[i];
+      const k = FOODS.kcalOf(item.key, qtyOf(i), item.unit, item.factor, table);
+      $(".ed-k", row).textContent = k === null ? "" : `${Math.round(k)}`;
+      row.classList.toggle("is-changed", Math.abs((nowQty.get(item.key) || 0) - (baseQty.get(item.key) || 0)) > 1e-9);
+    }
+
+    // Продукту без калорийности её можно вписать прямо здесь. Пока поле в фокусе, блок не перерисовывается.
+    const { kcal, missing } = FOODS.delta(ed.base.parts, currentItems(), table);
+    const box = $(".ed-missing", li);
+    if (!box.contains(document.activeElement)) {
+      const items = [...new Map(missing.map((item) => [FOODS.foodId(item.key, item.unit), item])).values()];
+      box.hidden = !items.length;
+      box.innerHTML = items.length
+        ? `<p>Нет калорийности, поэтому ккал не пересчитаны. Впишите её здесь или на экране продуктов.</p>${items.map((item) => {
+          const per = UNIT_LABEL[item.unit];
+          return `<label><span>${esc(cap(item.name))}</span><input data-food="${esc(FOODS.foodId(item.key, item.unit))}" data-name="${esc(item.name)}" data-unit="${esc(item.unit)}" inputmode="decimal" autocomplete="off" enterkeyhint="done" maxlength="6" aria-label="${esc(cap(item.name))}, ккал ${esc(per)}"><span class="f-unit">ккал<br>${esc(per)}</span></label>`;
+        }).join("")}`
+        : "";
+    }
+    const kcalInput = $("[name=kcal]", li);
+    if (!missing.length && ed.base.kcal != null && document.activeElement !== kcalInput) {
+      kcalInput.value = Math.max(0, Math.round(ed.base.kcal + kcal));
+    }
+
+    const saved = dayTotal(meal.day);
+    const total = dayTotal(meal.day, { key: meal.key, text: editorValue(li) });
+    $(".ed-day", li).innerHTML = `За день <b>${total}</b> ккал${total !== saved ? `, сейчас ${saved}` : ""}`;
+  }
+
+  // Количество поменяли кнопками или в поле: состав в тексте переписывается.
+  function applyQtys() {
+    const ta = $("[name=comp]", ed.li);
+    ta.value = FOODS.compose(ed.parts, ed.qtys);
+    autosize(ta);
+    refreshEditor();
+  }
+
+  function stepItem(row, dir) {
+    const i = Number(row.dataset.i);
+    ed.qtys[i] = FOODS.stepQty(ed.parts[i].item, qtyOf(i), dir);
+    $("input", row).value = numText(ed.qtys[i]);
+    applyQtys();
   }
 
   /* Отрисовка */
@@ -370,6 +532,33 @@
       </section>`).join("");
   }
 
+  // Продукты плана, свои продукты из правок и всё, чему пользователь вписал калорийность.
+  function renderFoods() {
+    const table = kcalTable();
+    for (const edit of Object.values(edits)) {
+      for (const part of FOODS.parseBody(splitHead(edit.t).rest)) {
+        const item = part.item;
+        const id = item && FOODS.foodId(item.key, item.unit);
+        if (item && !table.has(id)) table.set(id, { name: item.name, unit: item.unit, kcal: null, def: null });
+      }
+    }
+    const rows = [...table.entries()].sort(([, a], [, b]) => a.name.localeCompare(b.name, "ru"));
+    $("#food-list").innerHTML = rows.map(([key, f]) => {
+      const name = cap(f.name);
+      const per = UNIT_LABEL[f.unit] || UNIT_LABEL.г;
+      const edited = f.def != null && f.kcal !== f.def;
+      const note = f.def == null ? "свой продукт" : f.note || "";
+      return `<li class="f-item${edited ? " is-edited" : ""}" data-food="${esc(key)}" data-name="${esc(f.name)}" data-unit="${esc(f.unit)}">
+        <span><span class="f-name">${esc(name)}</span>${note ? `<span class="f-note f-def">${esc(note)}</span>` : ""}${f.def != null ? `<span class="f-note f-was">по плану ${esc(numText(f.def))}</span>` : ""}</span>
+        <span class="f-in">
+          <input value="${f.kcal == null ? "" : esc(numText(f.kcal))}" placeholder="—" inputmode="decimal" autocomplete="off" enterkeyhint="done" maxlength="6" aria-label="${esc(name)}, ккал ${esc(per)}">
+          <span class="f-unit">ккал<br>${esc(per)}</span>
+          ${f.def != null ? `<button class="f-reset" type="button" aria-label="Вернуть ${esc(numText(f.def))}">${icon("i-undo")}</button>` : ""}
+        </span>
+      </li>`;
+    }).join("");
+  }
+
   function noAnim(li, fn) {
     const row = li.querySelector(".meal-row");
     row.classList.add("no-anim");
@@ -378,7 +567,7 @@
     row.classList.remove("no-anim");
   }
 
-  // Наклейка ложится на новую правку и снимается при возврате к плану.
+  // Наклейка проявляется на новой правке и гаснет при возврате к плану.
   function animate(keys) {
     for (const key of keys) {
       const li = mealEl(key);
@@ -429,23 +618,28 @@
   let editStart = null;
 
   // Как в заметках iOS: черновик сохраняется, когда уходишь из редактора или сворачиваешь приложение.
-  function commitEditor() {
+  // force: нажата «Сохранить». Тогда сохраняется то, что видно в редакторе, даже без изменений.
+  function commitEditor(force) {
     const li = openKey && mealEl(openKey);
     if (!li || !$(".editor", li)) return;
     const meal = meals.get(openKey);
+    const value = editorValue(li);
+    // Редактор открыли и закрыли без изменений: убранный приём пищи остаётся убранным, хотя в редакторе состав из плана.
+    if (!force && ed && value === ed.initial && current(meal) === editStart) return;
     const before = current(meal);
-    setEdit(meal, editorValue(li), edits[openKey]?.f);
+    setEdit(meal, value, edits[openKey]?.f);
     if (current(meal) !== before) persist();
   }
 
-  function closePanel() {
+  function closePanel(save) {
     if (!openKey) return;
-    commitEditor();
+    commitEditor(save === true);
     const key = openKey;
     const li = mealEl(key);
     const changed = editStart !== null && current(meals.get(key)) !== editStart;
     openKey = null;
     editStart = null;
+    ed = null;
     document.body.classList.remove("is-editing");
     if (!li) return;
     li.classList.remove("is-open");
@@ -467,8 +661,12 @@
       editStart = current(meal);
       const ta = $("textarea", li);
       autosize(ta);
-      ta.focus();
-      ta.setSelectionRange(ta.value.length, ta.value.length);
+      startEditor(li, meal);
+      // Если в составе есть продукты с количеством, клавиатура не нужна: их меняют кнопками.
+      if (!li.querySelector(".ed-item")) {
+        ta.focus();
+        ta.setSelectionRange(ta.value.length, ta.value.length);
+      }
     }
     const rect = li.getBoundingClientRect();
     const overflow = rect.bottom - (window.innerHeight - 16);
@@ -479,17 +677,20 @@
   function cancelEdit(key) {
     const meal = meals.get(key);
     mealEl(key).querySelector(".editor").remove();
-    if (editStart !== null && current(meal) !== editStart) {
+    ed = null;
+    const reverted = editStart !== null && current(meal) !== editStart;
+    if (reverted) {
       setEdit(meal, editStart, edits[key]?.f);
       persist();
     }
     editStart = null;
+    if (reverted) rerender([key], key);
     openPanel(key, false);
   }
 
   function autosize(ta) {
     ta.style.height = "auto";
-    ta.style.height = `${ta.scrollHeight + 3}px`;
+    ta.style.height = `${ta.scrollHeight + 2}px`;
   }
 
   function resetEdit(key) {
@@ -543,6 +744,7 @@
     rerender([source, target], target);
     if (!saved) return;
     toast("Приёмы пищи поменялись местами", "Отменить", () => {
+      closePanel();
       for (const [key, value] of Object.entries(snapshot)) {
         if (value) edits[key] = value;
         else delete edits[key];
@@ -580,12 +782,8 @@
     return ok;
   }
 
-  async function copyDay(day, btn) {
-    const text = day.meals.map((m) => copyLine(current(m))).filter(Boolean).join("\n");
-    if (!(await writeClipboard(text))) {
-      toast("Не получилось скопировать");
-      return;
-    }
+  // Иконка копирования ненадолго становится галочкой.
+  function markCopied(btn) {
     const use = $("use", btn);
     btn.classList.add("is-done");
     use.setAttribute("href", "#i-check");
@@ -593,7 +791,23 @@
       btn.classList.remove("is-done");
       use.setAttribute("href", "#i-copy");
     }, 1600);
-    toast(`Скопировано: ${dayShort(day)}`);
+  }
+
+  async function copyText(text, btn, what) {
+    if (!text) return;
+    if (!(await writeClipboard(text))) {
+      toast("Не получилось скопировать");
+      return;
+    }
+    markCopied(btn);
+    toast(`Скопировано: ${what}`);
+  }
+
+  const copyDay = (day, btn) => copyText(day.meals.map((m) => copyLine(current(m))).filter(Boolean).join("\n"), btn, dayShort(day));
+
+  function copyMeal(meal, btn) {
+    const text = current(meal);
+    copyText(copyLine(text), btn, `${labelOf(splitHead(text).code)}, ${dayShort(meal.day)}`);
   }
 
   /* Сообщения */
@@ -632,7 +846,7 @@
 
   function goHome(smooth) {
     const el = dayEl(homeDay());
-    homeY = Math.round(el.getBoundingClientRect().top + window.scrollY - barHeight());
+    homeY = Math.round(el.getBoundingClientRect().top + window.scrollY - barHeight() - 8);
     // Прокрутка дальше двух экранов идёт без анимации.
     const near = Math.abs(homeY - window.scrollY) < window.innerHeight * 2;
     window.scrollTo({ top: homeY, behavior: smooth && near ? "smooth" : "auto" });
@@ -697,8 +911,10 @@
 
   /* Экраны */
 
+  const VIEWS = { "#recipes": "recipes", "#info": "info", "#products": "products" };
+  const TITLES = { recipes: "Рецепты", info: "Справка", products: "Продукты" };
   let view = "plan";
-  // План ещё не показывался, если приложение открыли сразу на рецептах или справке.
+  // План ещё не показывался, если приложение открыли сразу на другом экране.
   let planScroll = null;
 
   function showPlan() {
@@ -709,16 +925,17 @@
   }
 
   function route() {
-    const next = location.hash === "#recipes" ? "recipes" : location.hash === "#info" ? "info" : "plan";
+    const next = VIEWS[location.hash] || "plan";
     if (next === view) return;
     if (view === "plan" && homeY >= 0) planScroll = window.scrollY;
     endSwap();
     closePanel();
     view = next;
     document.body.dataset.view = next;
-    for (const name of ["plan", "recipes", "info"]) $(`#view-${name}`).hidden = name !== next;
-    $("#sub-title").textContent = next === "recipes" ? "Рецепты" : next === "info" ? "Справка" : "";
+    for (const name of ["plan", "recipes", "info", "products"]) $(`#view-${name}`).hidden = name !== next;
+    $("#sub-title").textContent = TITLES[next] || "";
     $("#to-today").hidden = true;
+    if (next === "products") renderFoods();
     if (next === "plan") showPlan();
     else window.scrollTo(0, 0);
   }
@@ -737,9 +954,28 @@
       endSwap();
       return;
     }
+    const theme = t.closest("[data-theme-set]");
+    if (theme) {
+      themePref = theme.dataset.themeSet;
+      store(THEME_KEY, themePref);
+      applyTheme();
+      return;
+    }
     const jump = t.closest("[data-jump]");
     if (jump) {
       document.getElementById(jump.dataset.jump).scrollIntoView();
+      return;
+    }
+    const step = t.closest("[data-step]");
+    if (step && ed) {
+      stepItem(step.closest(".ed-item"), Number(step.dataset.step));
+      return;
+    }
+    const reset = t.closest(".f-reset");
+    if (reset) {
+      const row = reset.closest(".f-item");
+      setFoodKcal(row.dataset.food, row.dataset.name, row.dataset.unit, null);
+      renderFoods();
       return;
     }
     const row = t.closest(".meal-row");
@@ -759,9 +995,10 @@
       const name = act.dataset.act;
       if (name === "edit") openPanel(key, true);
       else if (name === "cancel") cancelEdit(key);
-      else if (name === "save") closePanel();
+      else if (name === "save") closePanel(true);
       else if (name === "reset") resetEdit(key);
       else if (name === "swap") startSwap(key);
+      else if (name === "copy") copyMeal(meals.get(key), act);
       return;
     }
     const copyBtn = t.closest(".copy");
@@ -782,7 +1019,37 @@
 
   document.addEventListener("input", (e) => {
     const t = e.target;
-    if (t.matches(".editor textarea")) autosize(t);
+    if (ed && ed.li.contains(t)) {
+      if (t.matches("textarea")) {
+        autosize(t);
+        ed.parts = FOODS.parseBody(t.value);
+        ed.qtys = [];
+        $(".ed-items", ed.li).innerHTML = itemsHtml();
+        refreshEditor();
+      } else if (t.matches(".ed-item input")) {
+        const value = readNum(t.value);
+        if (value !== null) {
+          ed.qtys[Number(t.closest(".ed-item").dataset.i)] = round1(value);
+          applyQtys();
+        }
+      } else if (t.matches("[name=kcal]")) {
+        // Ккал вписаны руками: дальше считаем от них и от текущего состава.
+        const kcal = t.value.replace(/\D/g, "");
+        ed.base = { kcal: kcal ? Number(kcal) : null, parts: FOODS.parseBody($("[name=comp]", ed.li).value) };
+        refreshEditor();
+      } else if (t.matches("[data-food]")) {
+        setFoodKcal(t.dataset.food, t.dataset.name, t.dataset.unit, readNum(t.value));
+        refreshEditor();
+      }
+      return;
+    }
+    if (t.matches(".f-item input")) {
+      const row = t.closest(".f-item");
+      setFoodKcal(row.dataset.food, row.dataset.name, row.dataset.unit, readNum(t.value));
+      const f = kcalTable().get(row.dataset.food);
+      row.classList.toggle("is-edited", Boolean(f && f.def != null && f.kcal !== f.def));
+      return;
+    }
     if (t.matches("[data-week]")) {
       const value = t.value.trim();
       if (value) weights[t.dataset.week] = value;
@@ -791,13 +1058,27 @@
     }
   });
 
+  // Поле количества или калорийности после ввода показывает число в обычном виде.
+  document.addEventListener("change", (e) => {
+    const t = e.target;
+    if (ed && t.matches(".ed-item input")) t.value = numText(qtyOf(Number(t.closest(".ed-item").dataset.i)));
+    if (ed && t.matches(".ed-missing input")) setTimeout(() => ed && refreshEditor());
+    if (t.matches(".f-item input")) {
+      const f = kcalTable().get(t.closest(".f-item").dataset.food);
+      t.value = f?.kcal == null ? "" : numText(f.kcal);
+    }
+  });
+
   document.addEventListener("keydown", (e) => {
     const t = e.target;
-    if (t.closest(".editor")) {
+    if (t.matches(".ed-item input, .f-item input, [data-food]") && e.key === "Enter") {
+      e.preventDefault();
+      t.blur();
+    } else if (t.closest(".editor")) {
       if (e.key === "Escape") cancelEdit(t.closest(".meal").dataset.key);
       else if (e.key === "Enter" && !e.shiftKey && t.matches("input, textarea")) {
         e.preventDefault();
-        closePanel();
+        closePanel(true);
       }
     } else if (t.matches("[data-week]") && e.key === "Enter") {
       t.blur();
@@ -832,17 +1113,18 @@
     if (document.visibilityState === "hidden") commitEditor();
     else refreshDay();
   });
-  window.addEventListener("pagehide", commitEditor);
+  window.addEventListener("pagehide", () => commitEditor());
   setInterval(refreshDay, 60000);
 
   /* Запуск */
 
+  applyTheme();
   renderFeed();
   renderBase();
   renderRecipes();
   route();
   if (view === "plan") showPlan();
-  // Шрифт цифр меняет высоту строк, поэтому положение пересчитывается, если пользователь ещё не листал.
+  // Шрифт меняет высоту строк, поэтому положение пересчитывается, если пользователь ещё не листал.
   document.fonts?.ready.then(() => {
     if (view === "plan" && Math.abs(window.scrollY - homeY) < 2) goHome(false);
   });

@@ -1,4 +1,4 @@
-"""Рисует иконки приложения в docs/icons из шрифта docs/fonts.
+"""Рисует иконки приложения в docs/icons шрифтом из tools/fonts.
 
 Запуск: python tools/make_icons.py
 Нужны Pillow, fonttools и brotli (pip install pillow fonttools brotli).
@@ -11,7 +11,7 @@ from fontTools.varLib.instancer import instantiateVariableFont
 from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parent.parent
-FONT = ROOT / "docs" / "fonts" / "sofia-sans-xcond-cyrillic.woff2"
+FONT = ROOT / "tools" / "fonts" / "sofia-sans-xcond-cyrillic.woff2"
 OUT = ROOT / "docs" / "icons"
 
 YELLOW = (255, 216, 74)
