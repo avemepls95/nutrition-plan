@@ -1,0 +1,26 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          "docs/index.html"
+        ],
+        "createdAt": "2026-11-01T09:33:12.773Z",
+        "reason": "Claude: ложное срабатывание на .table-wrap, у ячеек таблицы внутри отступ 8-10px (styles.css .prose td); было до этой правки"
+      },
+      {
+        "rule": "cream-palette",
+        "value": "*",
+        "files": [
+          "docs/index.html"
+        ],
+        "createdAt": "2026-11-01T09:37:43.343Z",
+        "reason": "user confirmed 2026-11-01: фон тёплой бумаги оставляем"
+      }
+    ]
+  }
+}

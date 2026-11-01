@@ -1,4 +1,5 @@
-// Продукты в составе приёма пищи: разбор на продукт и количество, пересчёт ккал при смене количества.
+// Продукты в составе приёма пищи: разбор на продукт и количество, пересчёт ккал при смене количества,
+// пересчёт состава под свою калорийность и история своей калорийности по дням.
 (function (root) {
   "use strict";
 
@@ -195,6 +196,61 @@
     return { kcal, missing };
   }
 
+  // Граммы и миллилитры до целых, штуки, пачки, килограммы и литры до десятых, как числа пишутся в составе.
+  function roundQty(item, qty) {
+    const whole = item.factor === 1 && unitKind(item.unit) === "г";
+    const q = whole ? Math.round(qty) : Math.round(qty * 10) / 10;
+    return Math.max(whole ? 1 : 0.1, q);
+  }
+
+  // Состав под свою калорийность продуктов. table: калорийность в этот день, defaults: по умолчанию.
+  // keepKcal: граммовка продукта меняется так, чтобы его ккал остались как по калорийности по умолчанию,
+  // иначе граммовка прежняя. qtys: новое количество по номеру части. extra: на сколько ккал состав отличается
+  // от посчитанного по калорийности по умолчанию. У своего продукта калорийности по умолчанию нет,
+  // поэтому его ккал целиком входят в extra.
+  function adapt(parts, table, defaults, keepKcal) {
+    const qtys = [];
+    let extra = 0;
+    parts.forEach(({ item }, i) => {
+      if (!item) return;
+      const kcal = (qty, t) => kcalOf(item.key, qty, item.unit, item.factor, t);
+      const def = kcal(item.qty, defaults);
+      const now = kcal(item.qty, table);
+      let qty = item.qty;
+      if (keepKcal && def && now && now !== def) {
+        qty = roundQty(item, (item.qty * def) / now);
+        qtys[i] = qty;
+      }
+      extra += (kcal(qty, table) ?? 0) - (def ?? 0);
+    });
+    return { qtys, extra };
+  }
+
+  // Своя калорийность на день по истории [[дата, ккал или null], ...] в порядке дат.
+  // undefined: своей калорийности на этот день ещё нет. null: с этого дня калорийность по умолчанию.
+  function valueAt(hist, iso) {
+    let value;
+    for (const [from, k] of hist) {
+      if (from > iso) break;
+      value = k;
+    }
+    return value;
+  }
+
+  // История после того, как с дня from вписали value (null: калорийность по умолчанию).
+  // Запись с тем же значением, что действует до неё, ничего не меняет и убирается.
+  function withValue(hist, from, value) {
+    const entries = [...hist.filter(([d]) => d !== from), [from, value]].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    const out = [];
+    let prev = null;
+    for (const [d, k] of entries) {
+      if (k === prev) continue;
+      out.push([d, k]);
+      prev = k;
+    }
+    return out;
+  }
+
   function stepOf(item, qty, down) {
     const q = down ? qty - 1e-6 : qty;
     if (item.unit === "шт." || item.unit === "пачка") return q < 1 ? 0.5 : 1;
@@ -205,13 +261,16 @@
     return 10;
   }
 
-  function stepQty(item, qty, dir) {
+  // base: количество в точке отсчёта. Подстроенная граммовка не лежит на сетке шагов, поэтому шаг через неё
+  // останавливается на ней.
+  function stepQty(item, qty, dir, base) {
     const step = stepOf(item, qty, dir < 0);
     const next = dir > 0 ? Math.floor(qty / step + 1e-9) * step + step : Math.ceil(qty / step - 1e-9) * step - step;
-    return Math.max(0, Math.round(next * 10) / 10);
+    const value = Math.max(0, Math.round(next * 10) / 10);
+    return base !== undefined && (base - qty) * (base - value) < 0 ? base : value;
   }
 
-  const api = { DEFAULTS, keyOf, unitKind, foodId, parseBody, compose, kcalOf, delta, stepQty, fmt, num };
+  const api = { DEFAULTS, keyOf, unitKind, foodId, parseBody, compose, kcalOf, delta, adapt, valueAt, withValue, stepQty, fmt, num };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.FOODS = api;
 })(typeof window !== "undefined" ? window : globalThis);

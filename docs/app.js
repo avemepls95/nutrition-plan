@@ -18,7 +18,9 @@
   const BAR_COLOR = { light: "#2b5b5e", dark: "#16302f" };
 
   const CODE_RE = /^\s*([A-Z]{1,2}\d{1,2})\s*·\s*/;
-  const KCAL_RE = /^≈?\s*(\d+)\s*ккал\.?\s*/;
+  // В правке ккал записаны по калорийности по умолчанию. Если ккал вписаны руками меньше, чем дают
+  // продукты со своей калорийностью, число в правке меньше нуля.
+  const KCAL_RE = /^≈?\s*(-?\d+)\s*ккал\.?\s*/;
   // Объём молока и жирность в правках могут быть любыми.
   const COFFEE_RE = /\s*Кофе\s*\+\s*(\d+(?:[.,]\d+)?)\s*мл\s+молока(?:\s+(\d+(?:[.,]\d+)?)\s*%)?\.?/giu;
   // В тексте из плана после состава идут пояснения с заглавной буквы: «За 1–1,5 часа до тренировки.»
@@ -62,8 +64,6 @@
 
   const edits = Object.fromEntries(Object.entries(load(EDITS_KEY)).filter(([, e]) => typeof e?.t === "string"));
   const weights = load(WEIGHTS_KEY);
-  // Своя калорийность продуктов: { ключ: { k: ккал, n: название, u: единица } }.
-  const foodKcal = Object.fromEntries(Object.entries(load(KCAL_KEY)).filter(([, v]) => Number.isFinite(v?.k)));
 
   /* Тема */
 
@@ -185,22 +185,35 @@
 
   const planKcal = (meal) => splitHead(meal.text).kcal || 0;
 
-  // Ккал правки без числа считаются как в плане, убранный приём пищи даёт 0.
-  function kcalOfText(meal, text) {
-    if (text === meal.text) return planKcal(meal);
-    if (!text.trim()) return 0;
-    return splitHead(text).kcal ?? planKcal(meal);
+  // Приём пищи с учётом своей калорийности продуктов в этот день. Блюдо из плана держит ккал, граммовка
+  // продуктов подстраивается. Правка и блюдо с «Менять ккал» держат граммовку, пересчитываются ккал.
+  // edit: правка приёма пищи (по умолчанию сохранённая), null для блюда из плана.
+  // text: что показывать и копировать. kcal: ккал для итога дня, у правки без числа как в плане, у убранного 0.
+  function shownOf(meal, edit = edits[meal.key]) {
+    const text = edit ? edit.t : meal.text;
+    if (!text.trim()) return { text: "", kcal: 0 };
+    const keepKcal = (!edit || planTexts.has(edit.t)) && edit?.mode !== "kcal";
+    const { code, kcal, rest } = splitHead(text);
+    const parts = FOODS.parseBody(rest);
+    const { qtys, extra } = FOODS.adapt(parts, kcalTable(meal.day.iso), defaultKcal, keepKcal);
+    const total = (k) => Math.max(0, k + Math.round(extra));
+    return {
+      text: compose(code, kcal == null ? "" : String(total(kcal)), FOODS.compose(parts, qtys)),
+      kcal: total(kcal ?? planKcal(meal)),
+    };
   }
 
-  const dishKcal = (meal) => kcalOfText(meal, current(meal));
   const cupsKcal = (text) => COFFEE_KCAL * (text.match(COFFEE_RE) || []).length;
 
   // Итог из PDF уже включает кофе, поэтому к нему прибавляется только разница с планом.
-  // override: текст одного приёма пищи, ещё не сохранённый в редакторе.
-  const dayTotal = (day, override) => day.kcal + day.meals.reduce((sum, m) => {
-    const text = override && override.key === m.key ? override.text : current(m);
-    return sum + kcalOfText(m, text) + cupsKcal(text) - planKcal(m) - cupsKcal(m.text);
+  // editOf: правка приёма пищи, по умолчанию сохранённая. Редактор подставляет ещё не сохранённую.
+  const dayTotal = (day, editOf = (m) => edits[m.key]) => day.kcal + day.meals.reduce((sum, m) => {
+    const edit = editOf(m);
+    return sum + shownOf(m, edit).kcal + cupsKcal(edit ? edit.t : m.text) - planKcal(m) - cupsKcal(m.text);
   }, 0);
+
+  // Итог дня без правок: план, пересчитанный под свою калорийность продуктов.
+  const planTotal = (day) => dayTotal(day, () => null);
 
   function relLabel(iso) {
     if (iso === today) return "сегодня";
@@ -208,6 +221,11 @@
     if (iso === shift(today, 1)) return "завтра";
     return "";
   }
+
+  const dateShort = (iso) => {
+    const d = dateOf(iso);
+    return `${d.getDate()} ${MON_SHORT[d.getMonth()]}`;
+  };
 
   function dayShort(day) {
     if (!day.iso) return cap(day.name);
@@ -232,20 +250,40 @@
 
   const defaultKcal = new Map(FOODS.DEFAULTS.map(([key, name, unit, kcal, note]) => [FOODS.keyOf(key), { name, unit, kcal, def: kcal, note }]));
 
-  // Калорийность по умолчанию из foods.js и то, что пользователь вписал сам. Ключ из FOODS.foodId.
-  function kcalTable() {
+  // Своя калорийность продуктов: { ключ: { n: название, u: единица, h: история для FOODS.valueAt } }.
+  // Значение действует с дня, когда его вписали, поэтому прошедшие дни не меняются.
+  const foodKcal = {};
+  let datedNow = false;
+  for (const [id, v] of Object.entries(load(KCAL_KEY))) {
+    if (Array.isArray(v?.h)) foodKcal[id] = v;
+    else if (Number.isFinite(v?.k)) {
+      // У значения без даты днём начала становится день загрузки, поэтому прошедшие дни остаются как были.
+      foodKcal[id] = { n: v.n, u: v.u, h: [[today, v.k]] };
+      datedNow = true;
+    }
+  }
+  if (datedNow) store(KCAL_KEY, foodKcal);
+
+  // Калорийность продуктов в этот день (по умолчанию сегодня): из foods.js и своя. Ключ из FOODS.foodId.
+  function kcalTable(iso) {
     const table = new Map([...defaultKcal].map(([id, entry]) => [id, { ...entry }]));
     for (const [id, v] of Object.entries(foodKcal)) {
+      const k = FOODS.valueAt(v.h, iso || today);
+      if (k === undefined) continue;
       const entry = table.get(id);
-      if (entry) entry.kcal = v.k;
-      else table.set(id, { name: v.n || id.split("|")[0], unit: v.u || "г", kcal: v.k, def: null });
+      if (entry) entry.kcal = k ?? entry.def;
+      else table.set(id, { name: v.n || id.split("|")[0], unit: v.u || "г", kcal: k, def: null });
     }
     return table;
   }
 
-  function setFoodKcal(id, name, unit, value) {
-    if (value === null || value === defaultKcal.get(id)?.kcal) delete foodKcal[id];
-    else foodKcal[id] = { k: value, n: name, u: unit };
+  // С какого дня действует своя калорийность продукта, которая видна сегодня.
+  const kcalSince = (id) => foodKcal[id]?.h.filter(([d]) => d <= today).pop()?.[0];
+
+  function setFoodKcal(id, name, unit, value, from = today) {
+    const hist = FOODS.withValue(foodKcal[id]?.h || [], from, value === defaultKcal.get(id)?.kcal ? null : value);
+    if (hist.length) foodKcal[id] = { n: name, u: unit, h: hist };
+    else delete foodKcal[id];
     if (!store(KCAL_KEY, foodKcal)) toast("Не получилось сохранить калорийность на устройстве");
   }
 
@@ -262,7 +300,8 @@
 
   function mealHtml(meal) {
     const edit = edits[meal.key];
-    const text = current(meal);
+    const shown = shownOf(meal);
+    const text = shown.text;
     const empty = !text.trim();
     const plain = isPlain(meal);
     const p = parse(text, plain);
@@ -279,8 +318,8 @@
     const name = empty ? "убрано" : plain && recipe ? recipe.name : p.body;
 
     let price = "";
-    const plan = splitHead(meal.text).kcal;
-    if (edit && plan != null && dishKcal(meal) !== plan) {
+    const plan = edit && splitHead(meal.text).kcal != null ? shownOf(meal, null).kcal : null;
+    if (plan != null && shown.kcal !== plan) {
       price += `<s class="m-was"><span class="visually-hidden">в плане </span>${plan}</s>`;
     }
     if (p.kcal != null && !empty) price += `<b>${p.kcal}</b><span class="visually-hidden"> ккал</span>`;
@@ -322,7 +361,8 @@
     const water = `<span class="d-water">${icon("i-drop")}${day.water} ${plural(day.water, "стакан", "стакана", "стаканов")}<span class="visually-hidden"> воды</span></span>`;
 
     const total = dayTotal(day);
-    const changed = total !== day.kcal;
+    const plan = planTotal(day);
+    const changed = total !== plan;
     const what = isBase ? day.name.toLowerCase() : dayShort(day);
     // Прошедший день сворачивается нажатием на любое место заголовка: кнопка растянута под ним.
     const toggle = past ? `<button class="d-toggle" type="button" data-toggle aria-expanded="${!brief}" aria-label="${esc(cap(what))}: состав"></button>` : "";
@@ -331,7 +371,7 @@
       <header class="day-head${isBase ? " no-date" : ""}">
         ${toggle}${date}
         <span class="d-title">${title}</span>
-        <span class="d-total${changed ? " is-changed" : ""}">${changed ? `<s class="d-was"><span class="visually-hidden">в плане </span>${day.kcal}</s>` : ""}<b>${total}</b><small>ккал</small></span>
+        <span class="d-total${changed ? " is-changed" : ""}">${changed ? `<s class="d-was"><span class="visually-hidden">в плане </span>${plan}</s>` : ""}<b>${total}</b><small>ккал</small></span>
         <button class="copy" type="button" aria-label="Скопировать состав за день: ${esc(what)}">${icon("i-copy")}</button>
         <span class="d-sub">${load}${water}</span>
       </header>
@@ -355,7 +395,7 @@
     if (recipe) parts.push(`<p class="p-title">${esc(recipe.name)}</p>`);
     if (p.note) parts.push(`<p class="p-note">${esc(p.note)}</p>`);
     if (recipe) for (const step of recipe.steps) parts.push(`<p>${esc(step)}</p>`);
-    if (edit) parts.push(`<p class="p-orig"><b>В плане</b>${esc(meal.text)}</p>`);
+    if (edit || shownOf(meal).text !== meal.text) parts.push(`<p class="p-orig"><b>В плане</b>${esc(meal.text)}</p>`);
     const actions = [`<button class="btn" type="button" data-act="edit">Изменить</button>`];
     if (meal.day.iso) actions.push(`<button class="btn" type="button" data-act="swap">Поменять</button>`);
     if (text.trim()) actions.push(`<button class="btn" type="button" data-act="copy">${icon("i-copy")}Копировать</button>`);
@@ -363,8 +403,20 @@
     return `<div class="meal-panel">${parts.join("")}<div class="p-actions">${actions.join("")}</div></div>`;
   }
 
-  // У убранного приёма пищи редактор открывается с составом из плана.
-  const editSource = (meal) => (current(meal).trim() ? current(meal) : meal.text);
+  // Блюдо из плана, от которого считается приём пищи: свой текст плана, переехавший при обмене
+  // или тот, от которого сделана правка.
+  function planOf(meal) {
+    const edit = edits[meal.key];
+    if (edit && planTexts.has(edit.t)) return edit.t;
+    return meals.get(edit?.f)?.text || meal.text;
+  }
+
+  // Блюдо из плана в режиме переключателя: "grams" с граммовкой под свою калорийность, "kcal" с граммовкой из плана.
+  const planView = (meal, plan, mode) => shownOf(meal, mode === "kcal" ? { t: plan, mode } : { t: plan });
+  const modeOf = (meal) => (edits[meal.key]?.mode === "kcal" ? "kcal" : "grams");
+
+  // У убранного приёма пищи редактор открывается с блюдом из плана.
+  const editSource = (meal) => (current(meal).trim() ? shownOf(meal).text : planView(meal, planOf(meal), "grams").text);
 
   function editorHtml(meal) {
     const { code, kcal, rest } = splitHead(editSource(meal));
@@ -372,12 +424,28 @@
     const select = options
       .map((r) => `<option value="${esc(r.code)}"${r.code === code ? " selected" : ""}>${esc(r.code)}${r.name ? ` · ${esc(r.name)}` : ""}</option>`)
       .join("");
+    // Переключатель есть у блюда из плана, если своя калорийность меняет граммовку его продуктов.
+    let modes = "";
+    if (isPlain(meal) || !current(meal).trim()) {
+      const parts = FOODS.parseBody(splitHead(planOf(meal)).rest);
+      const { qtys } = FOODS.adapt(parts, kcalTable(meal.day.iso), defaultKcal, true);
+      const names = parts.filter((p, i) => qtys[i] !== undefined && qtys[i] !== p.item.qty).map((p) => p.item.name);
+      const mode = modeOf(meal);
+      if (names.length) modes = `<div class="ed-mode">
+        <p class="ed-label">Своя калорийность: ${esc(names.join(", "))}</p>
+        <div class="seg" role="group" aria-label="Своя калорийность продуктов">
+          <button type="button" data-mode="grams" aria-pressed="${mode === "grams"}">Менять граммовку</button>
+          <button type="button" data-mode="kcal" aria-pressed="${mode === "kcal"}">Менять ккал</button>
+        </div>
+      </div>`;
+    }
     return `<div class="meal-panel editor">
       <div class="ed-fields">
         <label class="ed-field ed-code">Блюдо<select name="code"><option value="">без кода</option>${select}</select></label>
         <label class="ed-field">Ккал<input name="kcal" value="${kcal ?? ""}" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" enterkeyhint="done"></label>
       </div>
       <p class="ed-day" aria-live="polite"></p>
+      ${modes}
       <ul class="ed-items" aria-label="Количество продуктов"></ul>
       <div class="ed-missing" hidden></div>
       <label class="ed-label" for="comp-${esc(meal.key)}">Состав</label>
@@ -389,32 +457,66 @@
     </div>`;
   }
 
-  function editorValue(li) {
+  // Правка, которую сохранит редактор: { t, mode }. Если код, ккал и состав совпали с блюдом из плана,
+  // приём пищи остаётся блюдом из плана, с граммовкой под свою калорийность или из плана («Менять ккал»).
+  function editorEntry(li) {
+    const meal = meals.get(ed.key);
+    const code = $("[name=code]", li).value;
     const kcal = $("[name=kcal]", li).value.replace(/\D/g, "");
-    return compose($("[name=code]", li).value, kcal, $("[name=comp]", li).value);
+    const comp = $("[name=comp]", li).value;
+    const text = compose(code, kcal, comp);
+    const grams = planView(meal, ed.plan, "grams").text;
+    const plan = planView(meal, ed.plan, "kcal").text;
+    if (text === grams && (ed.mode === "grams" || text !== plan)) return { t: ed.plan };
+    if (text === plan) return { t: ed.plan, mode: "kcal" };
+    const { extra } = FOODS.adapt(FOODS.parseBody(comp), kcalTable(meal.day.iso), defaultKcal, false);
+    return { t: compose(code, kcal && String(Number(kcal) - Math.round(extra)), comp) };
   }
 
   /* Количество продуктов в редакторе */
 
-  // Открытый редактор: части состава, новое количество по номеру части и точка отсчёта для пересчёта ккал.
+  // Открытый редактор: части состава, новое количество по номеру части, точка отсчёта для пересчёта ккал,
+  // блюдо из плана и режим переключателя.
   let ed = null;
 
   function startEditor(li, meal) {
     const parts = FOODS.parseBody($("[name=comp]", li).value);
     const { kcal } = splitHead(editSource(meal));
-    ed = { key: meal.key, li, parts, qtys: [], base: { kcal, parts } };
+    ed = { key: meal.key, li, parts, qtys: [], base: { kcal, parts }, plan: planOf(meal), mode: modeOf(meal) };
     // Если ккал правки получены пересчётом от блюда из плана, считаем от него же: тогда возврат к граммовкам
     // плана даёт ровно ккал плана, без накопленного округления.
-    const origin = meals.get(edits[meal.key]?.f) || meal;
-    const head = splitHead(origin.text);
-    const originParts = FOODS.parseBody(head.rest);
-    const d = FOODS.delta(originParts, currentItems(), kcalTable());
-    if (head.kcal != null && !d.missing.length && Math.max(0, Math.round(head.kcal + d.kcal)) === kcal) {
-      ed.base = { kcal: head.kcal, parts: originParts };
+    if (!isPlain(meal) && current(meal).trim()) {
+      const table = kcalTable(meal.day.iso);
+      for (const m of ["grams", "kcal"]) {
+        const head = splitHead(planView(meal, ed.plan, m).text);
+        const viewParts = FOODS.parseBody(head.rest);
+        const d = FOODS.delta(viewParts, currentItems(), table);
+        if (head.kcal != null && !d.missing.length && Math.max(0, Math.round(head.kcal + d.kcal)) === kcal) {
+          ed.base = { kcal: head.kcal, parts: viewParts };
+          break;
+        }
+      }
     }
     $(".ed-items", li).innerHTML = itemsHtml();
     refreshEditor();
-    ed.initial = editorValue(li);
+    ed.initial = JSON.stringify(editorEntry(li));
+  }
+
+  // Переключатель «Менять граммовку / Менять ккал» открывает блюдо из плана в выбранном режиме.
+  function setMode(mode) {
+    const view = splitHead(planView(meals.get(ed.key), ed.plan, mode).text);
+    ed.mode = mode;
+    for (const b of ed.li.querySelectorAll("[data-mode]")) b.setAttribute("aria-pressed", String(b.dataset.mode === mode));
+    $("[name=code]", ed.li).value = view.code || "";
+    $("[name=kcal]", ed.li).value = view.kcal ?? "";
+    const ta = $("[name=comp]", ed.li);
+    ta.value = view.rest;
+    autosize(ta);
+    ed.parts = FOODS.parseBody(view.rest);
+    ed.qtys = [];
+    ed.base = { kcal: view.kcal, parts: ed.parts };
+    $(".ed-items", ed.li).innerHTML = itemsHtml();
+    refreshEditor();
   }
 
   const qtyOf = (i) => ed.qtys[i] ?? ed.parts[i].item.qty;
@@ -442,7 +544,7 @@
   function refreshEditor() {
     const li = ed.li;
     const meal = meals.get(ed.key);
-    const table = kcalTable();
+    const table = kcalTable(meal.day.iso);
     const baseQty = new Map();
     for (const p of ed.base.parts) if (p.item) baseQty.set(p.item.key, (baseQty.get(p.item.key) || 0) + p.item.qty * p.item.factor);
     const nowQty = new Map();
@@ -457,13 +559,15 @@
     }
 
     // Продукту без калорийности её можно вписать прямо здесь. Пока поле в фокусе, блок не перерисовывается.
+    // Экран продуктов пишет калорийность с сегодняшнего дня, поэтому прошедшему приёму пищи её вписывают здесь.
     const { kcal, missing } = FOODS.delta(ed.base.parts, currentItems(), table);
     const box = $(".ed-missing", li);
+    const past = meal.day.iso && meal.day.iso < today;
     if (!box.contains(document.activeElement)) {
       const items = [...new Map(missing.map((item) => [FOODS.foodId(item.key, item.unit), item])).values()];
       box.hidden = !items.length;
       box.innerHTML = items.length
-        ? `<p>Нет калорийности, поэтому ккал не пересчитаны. Впишите её здесь или на экране продуктов.</p>${items.map((item) => {
+        ? `<p>Нет калорийности, поэтому ккал не пересчитаны. ${past ? `Впишите её здесь, она будет действовать с ${dateShort(meal.day.iso)}.` : "Впишите её здесь или на экране продуктов."}</p>${items.map((item) => {
           const per = UNIT_LABEL[item.unit];
           return `<label><span>${esc(cap(item.name))}</span><input data-food="${esc(FOODS.foodId(item.key, item.unit))}" data-name="${esc(item.name)}" data-unit="${esc(item.unit)}" inputmode="decimal" autocomplete="off" enterkeyhint="done" maxlength="6" aria-label="${esc(cap(item.name))}, ккал ${esc(per)}"><span class="f-unit">ккал<br>${esc(per)}</span></label>`;
         }).join("")}`
@@ -475,7 +579,8 @@
     }
 
     const saved = dayTotal(meal.day);
-    const total = dayTotal(meal.day, { key: meal.key, text: editorValue(li) });
+    const entry = editorEntry(li);
+    const total = dayTotal(meal.day, (m) => (m.key === meal.key ? entry : edits[m.key]));
     $(".ed-day", li).innerHTML = `За день <b>${total}</b> ккал${total !== saved ? `, сейчас ${saved}` : ""}`;
   }
 
@@ -489,7 +594,9 @@
 
   function stepItem(row, dir) {
     const i = Number(row.dataset.i);
-    ed.qtys[i] = FOODS.stepQty(ed.parts[i].item, qtyOf(i), dir);
+    const { item } = ed.parts[i];
+    const base = ed.base.parts.find((p) => p.item && p.item.key === item.key && p.item.unit === item.unit)?.item.qty;
+    ed.qtys[i] = FOODS.stepQty(item, qtyOf(i), dir, base);
     $("input", row).value = numText(ed.qtys[i]);
     applyQtys();
   }
@@ -501,8 +608,13 @@
   const mealEl = (key) => document.querySelector(`[data-key="${CSS.escape(key)}"]`);
   const barHeight = () => $(".bar").offsetHeight;
 
+  // Своя калорийность продуктов, по которой нарисована лента. Всю ленту перерисовываем только после её смены.
+  let feedFoods = null;
+  const foodsChanged = () => JSON.stringify(foodKcal) !== feedFoods;
+
   function renderFeed() {
     nextKey = nextMeal()?.key ?? null;
+    feedFoods = JSON.stringify(foodKcal);
     feed.innerHTML = PLAN.weeks.map((week) => weekHtml(week) + week.items.map(dayHtml).join("")).join("");
     observeToday();
   }
@@ -532,6 +644,12 @@
       </section>`).join("");
   }
 
+  // Подпись у своей калорийности продукта: «по плану 43, своё с 1 ноя».
+  function wasText(id, def) {
+    const since = kcalSince(id);
+    return `по плану ${numText(def)}${since ? `, своё с ${dateShort(since)}` : ""}`;
+  }
+
   // Продукты плана, свои продукты из правок и всё, чему пользователь вписал калорийность.
   function renderFoods() {
     const table = kcalTable();
@@ -549,7 +667,7 @@
       const edited = f.def != null && f.kcal !== f.def;
       const note = f.def == null ? "свой продукт" : f.note || "";
       return `<li class="f-item${edited ? " is-edited" : ""}" data-food="${esc(key)}" data-name="${esc(f.name)}" data-unit="${esc(f.unit)}">
-        <span><span class="f-name">${esc(name)}</span>${note ? `<span class="f-note f-def">${esc(note)}</span>` : ""}${f.def != null ? `<span class="f-note f-was">по плану ${esc(numText(f.def))}</span>` : ""}</span>
+        <span><span class="f-name">${esc(name)}</span>${note ? `<span class="f-note f-def">${esc(note)}</span>` : ""}${f.def != null ? `<span class="f-note f-was">${esc(wasText(key, f.def))}</span>` : ""}</span>
         <span class="f-in">
           <input value="${f.kcal == null ? "" : esc(numText(f.kcal))}" placeholder="—" inputmode="decimal" autocomplete="off" enterkeyhint="done" maxlength="6" aria-label="${esc(name)}, ккал ${esc(per)}">
           <span class="f-unit">ккал<br>${esc(per)}</span>
@@ -578,19 +696,25 @@
     }
   }
 
+  // Перерисовывает дни приёмов пищи keys, а после смены своей калорийности всю ленту и базовую неделю.
   function rerender(keys, anchorKey) {
     const anchor = anchorKey && mealEl(anchorKey);
     const before = anchor ? anchor.getBoundingClientRect().top : 0;
     const touched = new Set(keys.map((k) => meals.get(k).day));
-    for (const day of touched) {
-      const el = dayEl(day);
-      if (el) el.outerHTML = dayHtml(day);
+    if (foodsChanged()) {
+      renderFeed();
+      renderBase();
+    } else {
+      for (const day of touched) {
+        const el = dayEl(day);
+        if (el) el.outerHTML = dayHtml(day);
+      }
+      if ([...touched].some((d) => d.iso === today)) observeToday();
     }
     if (anchor) {
       const after = mealEl(anchorKey);
       if (after) window.scrollBy(0, after.getBoundingClientRect().top - before);
     }
-    if ([...touched].some((d) => d.iso === today)) observeToday();
     animate(keys);
   }
 
@@ -604,17 +728,21 @@
     return false;
   }
 
-  function setEdit(meal, text, from) {
+  // mode "kcal": у блюда из плана граммовка из плана, пересчитываются ккал («Менять ккал»).
+  function setEdit(meal, text, from, mode) {
     const t = text.replace(/\s*\n\s*/g, " ").trim();
-    if (t === meal.text) {
+    if (t === meal.text && !mode) {
       delete edits[meal.key];
       return;
     }
     edits[meal.key] = from && from !== meal.key ? { t, f: from } : { t };
+    if (mode) edits[meal.key].mode = mode;
   }
 
+  const editSnapshot = (key) => JSON.stringify(edits[key] ?? null);
+
   let openKey = null;
-  // Текст приёма пищи на момент открытия редактора.
+  // Правка приёма пищи на момент открытия редактора (editSnapshot).
   let editStart = null;
 
   // Как в заметках iOS: черновик сохраняется, когда уходишь из редактора или сворачиваешь приложение.
@@ -623,12 +751,12 @@
     const li = openKey && mealEl(openKey);
     if (!li || !$(".editor", li)) return;
     const meal = meals.get(openKey);
-    const value = editorValue(li);
+    const entry = editorEntry(li);
     // Редактор открыли и закрыли без изменений: убранный приём пищи остаётся убранным, хотя в редакторе состав из плана.
-    if (!force && ed && value === ed.initial && current(meal) === editStart) return;
-    const before = current(meal);
-    setEdit(meal, value, edits[openKey]?.f);
-    if (current(meal) !== before) persist();
+    if (!force && ed && JSON.stringify(entry) === ed.initial && editSnapshot(openKey) === editStart) return;
+    const before = editSnapshot(openKey);
+    setEdit(meal, entry.t, edits[openKey]?.f, entry.mode);
+    if (editSnapshot(openKey) !== before) persist();
   }
 
   function closePanel(save) {
@@ -636,7 +764,7 @@
     commitEditor(save === true);
     const key = openKey;
     const li = mealEl(key);
-    const changed = editStart !== null && current(meals.get(key)) !== editStart;
+    const changed = editStart !== null && editSnapshot(key) !== editStart;
     openKey = null;
     editStart = null;
     ed = null;
@@ -645,7 +773,8 @@
     li.classList.remove("is-open");
     li.querySelector(".meal-row").setAttribute("aria-expanded", "false");
     li.querySelector(".meal-panel")?.remove();
-    if (changed) rerender([key], key);
+    // В редакторе могли вписать калорийность своего продукта, он бывает и в других днях.
+    if (changed || foodsChanged()) rerender(changed ? [key] : [], key);
   }
 
   function openPanel(key, editing) {
@@ -658,7 +787,7 @@
     openKey = key;
     document.body.classList.toggle("is-editing", editing);
     if (editing) {
-      editStart = current(meal);
+      editStart = editSnapshot(key);
       const ta = $("textarea", li);
       autosize(ta);
       startEditor(li, meal);
@@ -673,14 +802,15 @@
     if (overflow > 0) window.scrollBy({ top: Math.min(overflow, rect.top - barHeight() - 8), behavior: "smooth" });
   }
 
-  // Черновик мог уже сохраниться при сворачивании, «Отмена» возвращает текст на момент открытия.
+  // Черновик мог уже сохраниться при сворачивании, «Отмена» возвращает правку на момент открытия.
   function cancelEdit(key) {
-    const meal = meals.get(key);
     mealEl(key).querySelector(".editor").remove();
     ed = null;
-    const reverted = editStart !== null && current(meal) !== editStart;
+    const reverted = editStart !== null && editSnapshot(key) !== editStart;
     if (reverted) {
-      setEdit(meal, editStart, edits[key]?.f);
+      const start = JSON.parse(editStart);
+      if (start) edits[key] = start;
+      else delete edits[key];
       persist();
     }
     editStart = null;
@@ -738,8 +868,9 @@
     const textB = current(b);
     const fromA = edits[source]?.f || source;
     const fromB = edits[target]?.f || target;
-    setEdit(a, textB, fromB);
-    setEdit(b, textA, fromA);
+    // «Менять ккал» переезжает вместе с блюдом.
+    setEdit(a, textB, fromB, snapshot[target]?.mode);
+    setEdit(b, textA, fromA, snapshot[source]?.mode);
     const saved = persist();
     rerender([source, target], target);
     if (!saved) return;
@@ -803,10 +934,10 @@
     toast(`Скопировано: ${what}`);
   }
 
-  const copyDay = (day, btn) => copyText(day.meals.map((m) => copyLine(current(m))).filter(Boolean).join("\n"), btn, dayShort(day));
+  const copyDay = (day, btn) => copyText(day.meals.map((m) => copyLine(shownOf(m).text)).filter(Boolean).join("\n"), btn, dayShort(day));
 
   function copyMeal(meal, btn) {
-    const text = current(meal);
+    const text = shownOf(meal).text;
     copyText(copyLine(text), btn, `${labelOf(splitHead(text).code)}, ${dayShort(meal.day)}`);
   }
 
@@ -930,6 +1061,11 @@
     if (view === "plan" && homeY >= 0) planScroll = window.scrollY;
     endSwap();
     closePanel();
+    // На экране продуктов могли поменять калорийность, от неё зависят граммовка и ккал в ленте.
+    if (foodsChanged()) {
+      renderFeed();
+      renderBase();
+    }
     view = next;
     document.body.dataset.view = next;
     for (const name of ["plan", "recipes", "info", "products"]) $(`#view-${name}`).hidden = name !== next;
@@ -969,6 +1105,11 @@
     const step = t.closest("[data-step]");
     if (step && ed) {
       stepItem(step.closest(".ed-item"), Number(step.dataset.step));
+      return;
+    }
+    const mode = t.closest("[data-mode]");
+    if (mode && ed) {
+      setMode(mode.dataset.mode);
       return;
     }
     const reset = t.closest(".f-reset");
@@ -1038,7 +1179,15 @@
         ed.base = { kcal: kcal ? Number(kcal) : null, parts: FOODS.parseBody($("[name=comp]", ed.li).value) };
         refreshEditor();
       } else if (t.matches("[data-food]")) {
-        setFoodKcal(t.dataset.food, t.dataset.name, t.dataset.unit, readNum(t.value));
+        // Калорийность, вписанная у прошедшего дня, действует с этого дня, чтобы приём пищи её увидел.
+        const iso = meals.get(ed.key).day.iso;
+        const before = kcalTable(iso);
+        setFoodKcal(t.dataset.food, t.dataset.name, t.dataset.unit, readNum(t.value), iso && iso < today ? iso : today);
+        // Ккал точки отсчёта посчитаны без этой калорийности, добавляем её и для количества в точке отсчёта.
+        if (ed.base.kcal != null) {
+          const extra = (table) => FOODS.adapt(ed.base.parts, table, defaultKcal, false).extra;
+          ed.base.kcal += extra(kcalTable(iso)) - extra(before);
+        }
         refreshEditor();
       }
       return;
@@ -1048,6 +1197,7 @@
       setFoodKcal(row.dataset.food, row.dataset.name, row.dataset.unit, readNum(t.value));
       const f = kcalTable().get(row.dataset.food);
       row.classList.toggle("is-edited", Boolean(f && f.def != null && f.kcal !== f.def));
+      if (f?.def != null) $(".f-was", row).textContent = wasText(row.dataset.food, f.def);
       return;
     }
     if (t.matches("[data-week]")) {
