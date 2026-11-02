@@ -130,6 +130,34 @@
     return `${head}${fmt(qty)}${item.space}${unit}${scaleAnnot(item.annot, qty / item.qty)}${item.tail}`;
   }
 
+  // Часть состава для нового продукта: «огурец 100 г», «яйцо 1 шт.», «попкорн Just a Moment ½ пачки».
+  function segmentText(name, qty, unit) {
+    let text = name.trim();
+    if (keyOf(text) === "яйца") text = text.replace(/^(я)(йц[оа])/iu, (_, y) => `${y}${qty === 1 ? "йцо" : "йца"}`);
+    return `${text} ${fmt(qty)} ${unit === "пачка" ? packWord(qty) : unit}`;
+  }
+
+  // Добавляет часть в конец состава, после последнего продукта и перед тем, что идёт за ним:
+  // «; огурец 100 г. Кофе + 20 мл молока 3%.» или «; огурец 100 г. За 1–1,5 часа до тренировки.»
+  function addSegment(body, segment) {
+    const text = body.trim();
+    const parts = parseBody(text);
+    let i = parts.length - 1;
+    while (i >= 0 && !parts[i].item) i--;
+    if (i < 0) {
+      if (!text) return `${segment}.`;
+      // Остался только кофе или пояснение: продукт встаёт перед ним.
+      if (/^[А-ЯЁA-Z]/u.test(text)) return `${segment}. ${text}`;
+      return `${text.replace(/[\s.]+$/, "")}; ${segment}.`;
+    }
+    const { item } = parts[i];
+    const head = parts[i].text.slice(0, parts[i].text.length - item.tail.length);
+    // «1 шт. Десерт-вечер: …»: точка стояла в «шт.», после нового продукта предложение заканчивается заново.
+    const tail = /^\s+\S/u.test(item.tail) ? `.${item.tail}` : item.tail;
+    parts[i] = { ...parts[i], text: `${head}; ${segment}${tail}` };
+    return parts.map((p, j) => (j ? p.sep : "") + p.text).join("");
+  }
+
   // Собирает состав заново. qtys: новое количество для каждой части (undefined, если не менялось).
   // Продукт с количеством 0 убирается, его пояснение после точки остаётся.
   function compose(parts, qtys) {
@@ -270,7 +298,7 @@
     return base !== undefined && (base - qty) * (base - value) < 0 ? base : value;
   }
 
-  const api = { DEFAULTS, keyOf, unitKind, foodId, parseBody, compose, kcalOf, delta, adapt, valueAt, withValue, stepQty, fmt, num };
+  const api = { DEFAULTS, keyOf, unitKind, foodId, parseBody, segmentText, addSegment, compose, kcalOf, delta, adapt, valueAt, withValue, stepQty, fmt, num };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.FOODS = api;
 })(typeof window !== "undefined" ? window : globalThis);

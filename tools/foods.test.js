@@ -230,3 +230,67 @@ test("withValue: значение в прошлый день перед запи
   // Assert
   assert.deepEqual(result, [["2026-10-30", 60]]);
 });
+
+test("segmentText: одно яйцо => «яйцо 1 шт.»", () => {
+  // Act
+  const result = FOODS.segmentText("яйца", 1, "шт.");
+
+  // Assert
+  assert.equal(result, "яйцо 1 шт.");
+});
+
+test("segmentText: полпачки попкорна => «½ пачки»", () => {
+  // Act
+  const result = FOODS.segmentText("попкорн Just a Moment", 0.5, "пачка");
+
+  // Assert
+  assert.equal(result, "попкорн Just a Moment ½ пачки");
+});
+
+test("addSegment: состав с кофе в конце => продукт встаёт перед кофе", () => {
+  // Act
+  const result = FOODS.addSegment("овсянка 45 г; банан 100 г. Кофе + 20 мл молока 3%.", "огурец 100 г");
+
+  // Assert
+  assert.equal(result, "овсянка 45 г; банан 100 г; огурец 100 г. Кофе + 20 мл молока 3%.");
+});
+
+test("addSegment: пояснение после «шт.» => предложение заканчивается после нового продукта", () => {
+  // Act
+  const result = FOODS.addSegment("банан 100 г; батончик Nestlé Fitness 1 шт. За 1–1,5 часа до тренировки.", "хлеб 25 г");
+
+  // Assert
+  assert.equal(result, "банан 100 г; батончик Nestlé Fitness 1 шт.; хлеб 25 г. За 1–1,5 часа до тренировки.");
+});
+
+test("addSegment: состав без точки в конце => продукт через точку с запятой", () => {
+  // Act
+  const result = FOODS.addSegment("яйца 2 шт.; масло 3 г", "хлеб 25 г");
+
+  // Assert
+  assert.equal(result, "яйца 2 шт.; масло 3 г; хлеб 25 г");
+});
+
+test("addSegment: остался только кофе => продукт перед кофе", () => {
+  // Act
+  const result = FOODS.addSegment("Кофе + 20 мл молока 3%.", "банан 100 г");
+
+  // Assert
+  assert.equal(result, "банан 100 г. Кофе + 20 мл молока 3%.");
+});
+
+test("addSegment: пустой состав => один продукт с точкой", () => {
+  // Act
+  const result = FOODS.addSegment("", "кефир 1,5% 200 мл");
+
+  // Assert
+  assert.equal(result, "кефир 1,5% 200 мл.");
+});
+
+test("addSegment: добавленный продукт разбирается как продукт с количеством", () => {
+  // Act
+  const parts = FOODS.parseBody(FOODS.addSegment("банан 100 г. Кофе + 20 мл молока 3%.", "огурец 100 г"));
+
+  // Assert
+  assert.deepEqual(parts.filter((p) => p.item).map((p) => [p.item.key, p.item.qty]), [["банан", 100], ["огурец", 100]]);
+});
