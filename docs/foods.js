@@ -70,10 +70,19 @@
     return String(Math.round(n * 10) / 10).replace(".", ",");
   }
 
+  const norm = (name) => name.toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ").replace(/^[\s+,.:;—-]+|[\s,.:;—-]+$/g, "");
+
+  // Названия, которые пользователь дал продуктам: ключ названия → ключ продукта. Задаёт setAliases.
+  let renamed = new Map();
+  const setAliases = (pairs) => {
+    renamed = new Map(pairs.map(([name, key]) => [norm(name), key]));
+  };
+
   const keyOf = (name) => {
-    const k = name.toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ").replace(/^[\s+,.:;—-]+|[\s,.:;—-]+$/g, "");
+    const k = norm(name);
     const alias = Object.keys(ALIASES).find((a) => a.replace(/ё/g, "е") === k);
-    return alias ? ALIASES[alias].replace(/ё/g, "е") : k;
+    const key = alias ? ALIASES[alias].replace(/ё/g, "е") : k;
+    return renamed.get(key) ?? key;
   };
 
   function packWord(n) {
@@ -179,12 +188,23 @@
     return parts.map((p, j) => (j ? p.sep : "") + p.text).join("");
   }
 
+  // Продукт под новым названием. Название с заглавной буквы остаётся с заглавной.
+  function renamedItem(part, name) {
+    const { item } = part;
+    const next = /^\p{Lu}/u.test(item.name) ? name.charAt(0).toUpperCase() + name.slice(1) : name;
+    const head = item.head.replace(item.name, () => next);
+    return { item: { ...item, head }, text: head + part.text.slice(item.head.length) };
+  }
+
   // Собирает состав заново. qtys: новое количество для каждой части (undefined, если не менялось).
+  // nameOf: новое название переименованного продукта, у остальных undefined.
   // Продукт с количеством 0 убирается, его пояснение после точки остаётся.
-  function compose(parts, qtys) {
+  function compose(parts, qtys, nameOf) {
     let out = "";
     let first = true;
-    parts.forEach((part, i) => {
+    parts.forEach((source, i) => {
+      const name = source.item && nameOf?.(source.item);
+      const part = name ? { ...source, ...renamedItem(source, name) } : source;
       const q = qtys[i];
       if (!part.item || q === undefined || q === part.item.qty) {
         out += (first ? "" : part.sep) + part.text;
@@ -258,13 +278,19 @@
   // иначе граммовка прежняя. qtys: новое количество по номеру части. extra: сколько прибавить к ккал из текста
   // состава. Они посчитаны по калорийности по умолчанию без своих продуктов и без кофе, поэтому ккал своего
   // продукта и кофе целиком входят в extra, а граммовка кофе не подстраивается.
-  function adapt(parts, table, defaults, keepKcal) {
+  // drop: продукт, который уходит из состава вместе с его ккал (удалённый пользователем).
+  function adapt(parts, table, defaults, keepKcal, drop) {
     const qtys = [];
     let extra = 0;
     parts.forEach(({ item }, i) => {
       if (!item) return;
       const kcal = (qty, t) => kcalOf(item.key, qty, item.unit, item.factor, t);
       const def = item.milk ? null : kcal(item.qty, defaults);
+      if (drop?.(item)) {
+        qtys[i] = 0;
+        extra -= def ?? 0;
+        return;
+      }
       const now = kcal(item.qty, table);
       let qty = item.qty;
       if (keepKcal && def && now && now !== def) {
@@ -320,7 +346,7 @@
     return base !== undefined && (base - qty) * (base - value) < 0 ? base : value;
   }
 
-  const api = { DEFAULTS, COFFEE_RE, keyOf, unitKind, foodId, parseBody, segmentText, coffeeText, addSegment, compose, kcalOf, delta, adapt, valueAt, withValue, stepQty, fmt, num };
+  const api = { DEFAULTS, COFFEE_RE, keyOf, setAliases, unitKind, foodId, parseBody, segmentText, coffeeText, addSegment, compose, kcalOf, delta, adapt, valueAt, withValue, stepQty, fmt, num };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.FOODS = api;
 })(typeof window !== "undefined" ? window : globalThis);

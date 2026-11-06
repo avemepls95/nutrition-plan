@@ -398,6 +398,90 @@ test("compose: кофе убран => состав заканчивается т
   assert.equal(result, "овсянка 45 г; банан 100 г.");
 });
 
+test("adapt: удалённый продукт => уходит из состава вместе с его ккал", () => {
+  // Arrange
+  const parts = FOODS.parseBody("кетчуп 25 г; грибной порошок 2 г; огурец 100 г.");
+  const drop = (item) => item.key === "грибной порошок";
+
+  // Act
+  const result = FOODS.adapt(parts, defaults, defaults, true, drop);
+
+  // Assert
+  assert.deepEqual([result.qtys[0], result.qtys[1], result.qtys[2], result.extra], [undefined, 0, undefined, -6]);
+});
+
+test("compose: удалённый продукт перед кофе => состав без него, кофе на месте", () => {
+  // Arrange
+  const parts = FOODS.parseBody("огурец 100 г; грибной порошок 2 г. Кофе + 20 мл молока 3%.");
+
+  // Act
+  const result = FOODS.compose(parts, [undefined, 0]);
+
+  // Assert
+  assert.equal(result, "огурец 100 г. Кофе + 20 мл молока 3%.");
+});
+
+test("compose: продукт переименован => в составе новое название, количество и пояснение прежние", () => {
+  // Arrange
+  const parts = FOODS.parseBody("курица 120 г сырая; картофель 230 г сырой / ≈184 г запечённый.");
+  const nameOf = (item) => (item.key === "картофель" ? "картошка" : undefined);
+
+  // Act
+  const result = FOODS.compose(parts, [], nameOf);
+
+  // Assert
+  assert.equal(result, "курица 120 г сырая; картошка 230 г сырой / ≈184 г запечённый.");
+});
+
+test("compose: переименованному продукту изменили количество => новое название с новым количеством", () => {
+  // Arrange
+  const parts = FOODS.parseBody("картофель 230 г сырой / ≈184 г запечённый.");
+  const nameOf = () => "картошка";
+
+  // Act
+  const result = FOODS.compose(parts, [115], nameOf);
+
+  // Assert
+  assert.equal(result, "картошка 115 г сырой / ≈92 г запечённый.");
+});
+
+test("compose: название в составе с заглавной буквы => новое название тоже с заглавной", () => {
+  // Arrange
+  const parts = FOODS.parseBody("Йогурт 1,5% 50 г, укроп.");
+  const nameOf = () => "йогурт греческий";
+
+  // Act
+  const result = FOODS.compose(parts, [], nameOf);
+
+  // Assert
+  assert.equal(result, "Йогурт греческий 50 г, укроп.");
+});
+
+test("keyOf: название, которое пользователь дал продукту => ключ этого продукта", (t) => {
+  // Arrange
+  FOODS.setAliases([["Картошка", "картофель"]]);
+  t.after(() => FOODS.setAliases([]));
+
+  // Act
+  const key = FOODS.keyOf("картошка");
+
+  // Assert
+  assert.equal(key, "картофель");
+});
+
+test("kcalOf: состав с новым названием продукта => калорийность этого продукта", (t) => {
+  // Arrange
+  FOODS.setAliases([["картошка", "картофель"]]);
+  t.after(() => FOODS.setAliases([]));
+  const { item } = FOODS.parseBody("картошка 100 г")[0];
+
+  // Act
+  const kcal = FOODS.kcalOf(item.key, item.qty, item.unit, item.factor, defaults);
+
+  // Assert
+  assert.equal(kcal, 77);
+});
+
 test("delta: у кофе стало больше молока => ккал растут по молоку", () => {
   // Arrange
   const before = FOODS.parseBody("Кофе + 20 мл молока 3%.");

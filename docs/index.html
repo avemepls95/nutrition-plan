@@ -40,7 +40,7 @@
   <symbol id="i-minus" viewBox="0 0 24 24"><path d="M6 12h12"/></symbol>
   <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 6v12M6 12h12"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></symbol>
-  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M5 7h14M10 7V5.5h4V7M7 7l.8 11.2a2 2 0 0 0 2 1.8h4.4a2 2 0 0 0 2-1.8L17 7M10.5 11v5M13.5 11v5"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.75" cy="10.75" r="6.25"/><path d="M15.5 15.5l4 4"/></symbol>
   <symbol id="i-undo" viewBox="0 0 24 24"><path d="M5 9.5h9.5a4.5 4.5 0 0 1 0 9H9M8.5 6L5 9.5 8.5 13"/></symbol>
 </svg>
 
@@ -77,7 +77,10 @@
     <div class="page">
       <p class="f-intro">Калорийность подобрана по плану, продукты каждого блюда в сумме дают его ккал. Если на вашей упаковке другая, впишите её. Своя калорийность действует с того дня, когда вы её вписали. Граммовка продукта в блюдах плана под неё подстраивается, и ккал остаются почти прежними. В приёмах пищи, которые вы правили сами, остаётся ваша граммовка и пересчитываются ккал.</p>
       <div id="food-new"></div>
+      <label class="f-search"><svg aria-hidden="true"><use href="#i-search"/></svg><input type="search" id="food-search" placeholder="Найти продукт" autocomplete="off" enterkeyhint="search" aria-label="Найти продукт"></label>
+      <p class="f-hint">Смахните продукт влево, чтобы удалить его. Нажмите на название, чтобы переименовать.</p>
       <ul class="f-list" id="food-list"></ul>
+      <p class="f-empty" id="food-empty" hidden>Ничего не нашлось</p>
     </div>
   </section>
 

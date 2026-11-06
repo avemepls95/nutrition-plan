@@ -374,7 +374,24 @@ body[data-view="plan"] [data-for="sub"] { display: none !important; }
   width: 100%;
   padding: 10px var(--pad);
   align-items: start;
+  touch-action: pan-y;
 }
+/* Полоса «Убрать» под строкой проступает, когда строку смахивают влево. */
+.m-swipe {
+  position: absolute;
+  inset: 3px 6px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 18px;
+  border-radius: 13px;
+  background: var(--danger);
+  color: var(--danger-ink);
+  font: 600 14.5px/1 var(--f-ui);
+  visibility: hidden;
+}
+.meal.is-swiping > .m-swipe { visibility: visible; }
+.meal.is-swiping > .meal-row { background: var(--card); user-select: none; -webkit-user-select: none; }
 /* Подложка строки: наклейка правки, нажатие и раскрытие. */
 .meal-row::before {
   content: "";
@@ -451,6 +468,26 @@ body[data-view="plan"] [data-for="sub"] { display: none !important; }
 .m-price { display: grid; justify-items: end; min-width: 30px; }
 .m-kcal { display: flex; align-items: baseline; gap: 5px; }
 .m-price b { font: 600 16px/1.35 var(--f-num); font-variant-numeric: tabular-nums; }
+/* Копирование приёма пищи под числом ккал. Кнопка лежит поверх строки, место под ней держит .m-copy-space. */
+.m-copy-space { display: block; height: 24px; }
+/* Без числа ккал место держит и строку числа. */
+.m-copy-space.is-tall { height: 46px; }
+.m-copy {
+  position: absolute;
+  z-index: 1;
+  top: 26px;
+  right: calc(var(--pad) - 11px);
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: var(--ink-3);
+}
+.m-copy svg { width: 18px; height: 18px; }
+.m-copy:active { background: var(--press); }
+.m-copy.is-done { color: var(--accent); }
+.meal.is-swiping > .m-copy, .meal:has(> .editor) > .m-copy, body.is-swapping .m-copy { visibility: hidden; }
 .m-was {
   font: 500 12.5px/1 var(--f-num);
   font-variant-numeric: tabular-nums;
@@ -460,7 +497,7 @@ body[data-view="plan"] [data-for="sub"] { display: none !important; }
 
 /* Краткий вид прошедших дней */
 
-.is-brief .m-body, .is-brief .m-extra, .is-brief .m-time .alt, .is-brief .m-was { display: none; }
+.is-brief .m-body, .is-brief .m-extra, .is-brief .m-time .alt, .is-brief .m-was, .is-brief .m-copy, .is-brief .m-copy-space { display: none; }
 .is-brief .m-name { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink-2); }
 .is-brief .meal-row { padding-top: 7px; padding-bottom: 7px; }
 .is-brief .m-time, .is-brief .m-price b { font-size: 14.5px; color: var(--ink-2); }
@@ -628,8 +665,9 @@ body[data-view="plan"] [data-for="sub"] { display: none !important; }
 .ed-item.is-removed .ed-k { color: var(--ink-3); font-weight: 500; }
 .ed-item.is-removed .stepper { display: none; }
 .ed-item.is-removed .ed-restore { display: inline-flex; }
-/* Убрать продукт без свайпа: кнопка скрыта, как подпись для экранного диктора, и видна при переходе на неё с клавиатуры. */
-.ed-remove {
+/* Убрать или удалить продукт без свайпа: кнопка скрыта, как подпись для экранного диктора, и видна при переходе
+   на неё с клавиатуры. */
+.ed-remove, .f-del {
   position: absolute;
   right: 8px;
   top: 50%;
@@ -643,8 +681,8 @@ body[data-view="plan"] [data-for="sub"] { display: none !important; }
   background: var(--danger);
   color: var(--danger-ink);
 }
-.ed-remove svg { width: 18px; height: 18px; stroke-width: 2; }
-.ed-remove:focus-visible { width: 36px; height: 36px; margin-top: -18px; clip-path: none; }
+.ed-remove svg, .f-del svg { width: 18px; height: 18px; stroke-width: 2; }
+.ed-remove:focus-visible, .f-del:focus-visible { width: 36px; height: 36px; margin-top: -18px; clip-path: none; }
 .ed-item.is-removed .ed-remove { display: none; }
 .ed-hint { margin: 6px 2px 0; font-size: 12.5px; color: var(--ink-3); }
 
@@ -931,16 +969,78 @@ body.is-swapping .meal.is-added > .meal-row { opacity: 0.45; }
   box-shadow: var(--shadow-card);
 }
 .f-form-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
-.f-item {
+/* Поиск продукта: поле на белой карточке над списком. */
+.f-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding: 0 12px;
+  border-radius: 14px;
+  background: var(--card);
+  box-shadow: var(--shadow-card);
+  color: var(--ink-3);
+}
+.f-search:focus-within { box-shadow: var(--shadow-card), inset 0 0 0 2px var(--accent); }
+.f-search svg { width: 18px; height: 18px; flex: none; }
+.f-search input {
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 16px;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.f-search input::placeholder { color: var(--ink-3); }
+.f-hint { margin: 0 4px 10px; font-size: 12.5px; color: var(--ink-3); }
+.f-list:empty { display: none; }
+.f-empty { margin: 14px 4px; font-size: 14px; color: var(--ink-3); text-align: center; }
+
+/* Строка продукта лежит поверх полосы «Удалить» и смахивается влево. */
+.f-item { position: relative; }
+.f-item + .f-item { border-top: 1px solid var(--rule); }
+.f-swipe {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 18px;
+  background: var(--danger);
+  color: var(--danger-ink);
+  font: 600 14.5px/1 var(--f-ui);
+  visibility: hidden;
+}
+.f-item.is-swiping .f-swipe { visibility: visible; }
+.f-row {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   padding: 9px 12px 9px var(--pad);
+  background: var(--card);
+  touch-action: pan-y;
 }
-.f-item + .f-item { border-top: 1px solid var(--rule); }
-.f-item.is-edited { background: var(--sticker); }
-.f-name { display: block; font-size: 15.5px; line-height: 1.3; }
+.f-item.is-edited > .f-row { background: var(--sticker); }
+.f-item.is-swiping > .f-row { user-select: none; -webkit-user-select: none; }
+.f-text { min-width: 0; }
+.f-name { display: block; max-width: 100%; font-size: 15.5px; line-height: 1.3; overflow-wrap: break-word; }
+.f-rename {
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--ink);
+  font-size: 16px;
+}
 .f-note { display: block; margin-top: 1px; font-size: 12.5px; color: var(--ink-3); }
 .f-item.is-edited .f-note { color: var(--sticker-ink-2); }
 .f-item .f-was, .f-item .f-reset, .f-item.is-edited .f-def { display: none; }
@@ -948,7 +1048,7 @@ body.is-swapping .meal.is-added > .meal-row { opacity: 0.45; }
 .f-item.is-edited .f-reset { display: grid; }
 .f-in { display: flex; align-items: center; gap: 8px; }
 .f-unit { width: 58px; font-size: 12px; line-height: 1.25; color: var(--ink-3); white-space: nowrap; }
-.f-reset, .f-del {
+.f-reset {
   width: 44px;
   height: 44px;
   margin: -8px -10px -8px -8px;
@@ -957,10 +1057,8 @@ body.is-swapping .meal.is-added > .meal-row { opacity: 0.45; }
   border-radius: 10px;
   color: var(--sticker-ink-2);
 }
-.f-reset svg, .f-del svg { width: 19px; height: 19px; }
+.f-reset svg { width: 19px; height: 19px; }
 .f-reset:active { background: var(--sticker-tag); }
-.f-del { color: var(--ink-3); }
-.f-del:active { background: var(--press); }
 
 .prose { line-height: 1.5; }
 .prose h1 {

@@ -234,16 +234,17 @@
   // edit: правка приёма пищи (по умолчанию сохранённая), null для блюда из плана. table: калорийность продуктов.
   // text: что показывать и копировать. kcal: ккал для итога дня, у правки без числа как в плане, у убранного 0.
   // В тексте плана и правки ккал записаны без кофе, ккал кофе прибавляются по его молоку.
+  // Удалённые к этому дню продукты уходят из состава вместе с их ккал, переименованные идут под новым названием.
   function shownOf(meal, edit = edits[meal.key], table = kcalTable(meal.day.iso)) {
     const text = edit ? edit.t : meal.text;
     if (!text.trim()) return { text: "", kcal: 0 };
     const keepKcal = (!edit || planTexts.has(edit.t)) && edit?.mode !== "kcal";
     const { code, kcal, rest } = splitHead(text);
     const parts = FOODS.parseBody(rest);
-    const { qtys, extra } = FOODS.adapt(parts, table, defaultKcal, keepKcal);
+    const { qtys, extra } = FOODS.adapt(parts, table, defaultKcal, keepKcal, droppedIn(table));
     const total = (k) => Math.max(0, k + Math.round(extra));
     return {
-      text: compose(code, kcal == null ? "" : String(total(kcal)), FOODS.compose(parts, qtys)),
+      text: compose(code, kcal == null ? "" : String(total(kcal)), FOODS.compose(parts, qtys, nameOf)),
       kcal: total(kcal ?? (splitHead(meal.text).kcal || 0)),
     };
   }
@@ -295,8 +296,10 @@
   // text: название продукта так, как оно пишется в составе («батончик Nestlé Fitness»).
   const defaultKcal = new Map(FOODS.DEFAULTS.map(([key, name, unit, kcal, note]) => [FOODS.keyOf(key), { name, text: key, unit, kcal, def: kcal, note }]));
 
-  // Своя калорийность продуктов: { ключ: { n: название, u: единица, h: история для FOODS.valueAt } }.
-  // Значение действует с дня, когда его вписали, поэтому прошедшие дни не меняются.
+  // Своя калорийность и названия продуктов: { ключ: { n: название, u: единица, h: история для FOODS.valueAt,
+  // off: день, с которого продукт удалён, a: названия, которые дал пользователь, последнее действует } }.
+  // Калорийность и удаление действуют с дня, когда их задали, поэтому прошедшие дни не меняются.
+  // off: true у продукта, удалённого прошлой версией: он только скрыт из списков и из состава не уходит.
   const foodKcal = {};
   let datedNow = false;
   for (const [id, v] of Object.entries(load(KCAL_KEY))) {
@@ -309,17 +312,59 @@
   }
   if (datedNow) store(KCAL_KEY, foodKcal);
 
-  // Калорийность продуктов в этот день (по умолчанию сегодня): из foods.js и своя. Ключ из FOODS.foodId.
+  // Название продукта, данное пользователем, и название, под которым он был в плане или был добавлен.
+  const ownName = (id) => foodKcal[id]?.a?.[foodKcal[id].a.length - 1];
+  const firstName = (id) => defaultKcal.get(id)?.text ?? foodKcal[id]?.n ?? id.split("|")[0];
+
+  // Переименованные продукты: ключ из FOODS.foodId → название в составе. Все названия, которые продукт
+  // носил, остаются его названиями в тексте правок и моих блюд.
+  const renamedFoods = new Map();
+  function syncNames() {
+    renamedFoods.clear();
+    const aliases = [];
+    for (const [id, v] of Object.entries(foodKcal)) {
+      if (!v.a?.length) continue;
+      const key = id.split("|")[0];
+      for (const name of v.a) aliases.push([name, key]);
+      if (ownName(id).toLowerCase() !== firstName(id).toLowerCase()) renamedFoods.set(id, ownName(id));
+    }
+    FOODS.setAliases(aliases);
+  }
+  syncNames();
+  // У кофе название в составе своё («Кофе + 20 мл молока 3%»), его молоко не переименовывается.
+  const nameOf = (item) => (item.milk ? undefined : renamedFoods.get(FOODS.foodId(item.key, item.unit)));
+
+  // Калорийность продуктов в этот день (по умолчанию сегодня): из foods.js и своя, с названием от пользователя
+  // и пометкой off у удалённого. Ключ из FOODS.foodId.
   function kcalTable(iso) {
+    const day = iso || today;
     const table = new Map([...defaultKcal].map(([id, entry]) => [id, { ...entry }]));
     for (const [id, v] of Object.entries(foodKcal)) {
-      const k = FOODS.valueAt(v.h, iso || today);
-      if (k === undefined) continue;
-      const entry = table.get(id);
-      if (entry) entry.kcal = k ?? entry.def;
-      else table.set(id, { name: v.n || id.split("|")[0], unit: v.u || "г", kcal: k, def: null });
+      const k = FOODS.valueAt(v.h, day);
+      let entry = table.get(id);
+      if (entry) {
+        if (k !== undefined) entry.kcal = k ?? entry.def;
+      } else {
+        entry = { name: v.n || id.split("|")[0], unit: v.u || "г", kcal: k ?? null, def: null };
+        table.set(id, entry);
+      }
+      if (renamedFoods.has(id)) {
+        entry.orig = firstName(id);
+        entry.name = entry.text = renamedFoods.get(id);
+      }
+      if (typeof v.off === "string" && v.off <= day) entry.off = true;
     }
     return table;
+  }
+
+  // Удалённый к этому дню продукт уходит из состава. Кофе остаётся, даже если удалили его молоко.
+  const droppedIn = (table) => (item) => !item.milk && Boolean(table.get(FOODS.foodId(item.key, item.unit))?.off);
+
+  // Состав моего блюда в этот день: без удалённых продуктов и с названиями от пользователя.
+  function dishView(body, iso) {
+    const table = kcalTable(iso);
+    const parts = FOODS.parseBody(body);
+    return FOODS.compose(parts, FOODS.adapt(parts, table, defaultKcal, false, droppedIn(table)).qtys, nameOf);
   }
 
   // С какого дня действует своя калорийность продукта, которая видна сегодня.
@@ -328,9 +373,12 @@
   // Название продукта из состава на экране продуктов. У кофе это его молоко.
   const foodName = (item) => item.milk || item.name;
 
+  // Название и единица остаются те, с которыми продукт появился впервые.
   function setFoodKcal(id, name, unit, value, from = today) {
-    const hist = FOODS.withValue(foodKcal[id]?.h || [], from, value === defaultKcal.get(id)?.kcal ? null : value);
-    if (hist.length) foodKcal[id] = { n: name, u: unit, h: hist };
+    const before = foodKcal[id];
+    const hist = FOODS.withValue(before?.h || [], from, value === defaultKcal.get(id)?.kcal ? null : value);
+    const entry = { ...before, n: before?.n || name, u: before?.u || unit, h: hist };
+    if (hist.length || entry.off || entry.a?.length) foodKcal[id] = entry;
     else delete foodKcal[id];
     saveFoods();
   }
@@ -363,9 +411,11 @@
     if (edit) cls.push("is-edited");
     if (meal.added) cls.push("is-added");
     if (meal.key === nextKey) cls.push("is-next");
+    if (empty) cls.push("is-empty");
 
     // Новый приём пищи пуст, пока его не сохранили.
-    const gone = meal.added ? "новый приём пищи" : "убрано";
+    // Из состава могли уйти все продукты, если их удалили.
+    const gone = current(meal).trim() ? "продукты удалены" : meal.added ? "новый приём пищи" : "убрано";
     let body = p.code ? `<span class="m-sku">${esc(p.code)}</span> ` : "";
     body += empty ? `<span class="m-empty">${gone}</span>` : nbspUnits(esc(p.body));
     const source = edit?.f && meals.get(edit.f);
@@ -380,12 +430,16 @@
     if (p.kcal != null && !empty) price += `<b>${p.kcal}</b><span class="visually-hidden"> ккал</span>`;
     if (price) price = `<span class="m-kcal">${price}</span>`;
 
+    // Строка смахивается влево поверх полосы «Убрать». Кнопка копирования лежит поверх строки под числом ккал,
+    // место под ней держит пустой блок в колонке ккал.
+    const strip = empty ? "" : `<span class="m-swipe" aria-hidden="true">${meal.added ? "Удалить" : "Убрать"}</span>`;
+    const copy = empty ? "" : `<button class="m-copy" type="button" aria-label="Скопировать: ${esc(labelOf(p.code))}, ${esc(dayShort(meal.day))}">${icon("i-copy")}</button>`;
     return `<li class="${cls.join(" ")}" data-key="${esc(meal.key)}">
-      <button class="meal-row" type="button" aria-expanded="false">
+      ${strip}<button class="meal-row" type="button" aria-expanded="false">
         <span class="m-time"><span>${esc(t1)}</span>${t2 ? `<span class="alt">${esc(t2)}</span>` : ""}</span>
         <span class="m-text"><span class="m-body">${body}</span><span class="m-name">${esc(name)}</span><span class="m-extra">${p.coffee.map(coffeeHtml).join("")}</span></span>
-        <span class="m-price">${price}</span>
-      </button>
+        <span class="m-price">${price}${empty ? "" : `<span class="m-copy-space${price ? "" : " is-tall"}"></span>`}</span>
+      </button>${copy}
     </li>`;
   }
 
@@ -457,7 +511,6 @@
     if (!meal.added && (edit || shownOf(meal).text !== plan)) parts.push(`<p class="p-orig"><b>В плане</b>${esc(plan)}</p>`);
     const actions = [`<button class="btn" type="button" data-act="edit">Изменить</button>`];
     if (meal.day.iso && !meal.added) actions.push(`<button class="btn" type="button" data-act="swap">Поменять</button>`);
-    if (text.trim()) actions.push(`<button class="btn" type="button" data-act="copy">${icon("i-copy")}Копировать</button>`);
     // Убранный приём пищи из плана остаётся в дне с пометкой «убрано», добавленный удаляется совсем.
     if (meal.added) actions.push(`<button class="btn" type="button" data-act="delete">Удалить</button>`);
     else if (text.trim()) actions.push(`<button class="btn" type="button" data-act="remove">Убрать</button>`);
@@ -484,8 +537,9 @@
   // меняет граммовку его продуктов. Пустая строка, если не меняет.
   function modesHtml(meal, plan, mode) {
     const parts = FOODS.parseBody(splitHead(plan).rest);
-    const { qtys } = FOODS.adapt(parts, kcalTable(meal.day.iso), defaultKcal, true);
-    const names = parts.filter((p, i) => qtys[i] !== undefined && qtys[i] !== p.item.qty).map((p) => p.item.name);
+    const table = kcalTable(meal.day.iso);
+    const { qtys } = FOODS.adapt(parts, table, defaultKcal, true, droppedIn(table));
+    const names = parts.filter((p, i) => qtys[i] > 0 && qtys[i] !== p.item.qty).map((p) => nameOf(p.item) || p.item.name);
     if (!names.length) return "";
     return `<p class="ed-label">Своя калорийность: ${esc(names.join(", "))}</p>
       <div class="seg" role="group" aria-label="Своя калорийность продуктов">
@@ -672,7 +726,8 @@
   function useMyDish(dish) {
     const ta = $("[name=comp]", ed.li);
     const coffee = (ta.value.match(COFFEE_RE) || []).map((c) => c.trim()).join(" ");
-    const body = coffee ? `${dish.t.replace(/[\s.]+$/, "")}. ${coffee}` : dish.t;
+    const food = dishView(dish.t, ed.iso);
+    const body = coffee && food ? `${food.replace(/[\s.]+$/, "")}. ${coffee}` : food || coffee;
     ed.from = undefined;
     const box = $(".ed-mode", ed.li);
     box.innerHTML = "";
@@ -802,6 +857,12 @@
       return;
     }
     const key = choice.coffee ? choice.coffee.key : FOODS.keyOf(choice.name);
+    // Удалённый продукт ушёл бы из состава сразу после сохранения.
+    if (!choice.coffee && kcalTable(ed.iso).get(FOODS.foodId(key, choice.unit))?.off) {
+      toast("Продукт удалён. Вернуть его можно на экране продуктов через «Новый продукт»");
+      $("[name=add-name]", form).focus();
+      return;
+    }
     const i = ed.parts.findIndex((p) => p.item && p.item.key === key && FOODS.unitKind(p.item.unit) === FOODS.unitKind(choice.unit));
     if (i >= 0 && ed.parts[i].item.factor === 1) {
       ed.qtys[i] = round1(qtyOf(i) + qty);
@@ -936,7 +997,7 @@
         <ul class="r-list">${g.items.map((r) => `
           <li class="recipe">
             <p class="r-head"><span class="r-code">${esc(r.code)}</span><span class="r-name">${esc(r.name)}</span><span class="r-kcal">${r.kcal}<small>ккал</small></span></p>
-            ${r.comp ? `<p class="r-comp">${esc(r.comp)}</p>` : ""}
+            ${r.comp ? `<p class="r-comp">${esc(FOODS.compose(FOODS.parseBody(r.comp), [], nameOf))}</p>` : ""}
             ${r.steps.map((s) => `<p class="r-steps">${esc(s)}</p>`).join("")}
             ${r.uses ? `<p class="r-uses">${esc(cap(r.uses))}</p>` : ""}
           </li>`).join("")}
@@ -964,28 +1025,95 @@
   }
 
   // Продукты плана, свои продукты из правок и моих блюд и всё, чему пользователь вписал калорийность, по алфавиту.
-  // Удалённых своих продуктов в списке нет.
+  // Удалённых продуктов в списке нет.
   function foodRows() {
     const table = kcalTable();
     for (const [id, item] of usedFoods()) if (!table.has(id)) table.set(id, { name: item.name, unit: item.unit, kcal: null, def: null });
     return [...table.entries()].filter(([id]) => !foodKcal[id]?.off).sort(([, a], [, b]) => a.name.localeCompare(b.name, "ru"));
   }
 
+  const searchKey = (s) => s.toLowerCase().replace(/ё/g, "е").trim();
+
+  // Строка продукта смахивается влево поверх полосы «Удалить», кнопка «Удалить» видна только с клавиатуры.
+  // Нажатие на название открывает поле для нового названия. Поиск ищет и по названию из плана.
   function renderFoods() {
-    $("#food-list").innerHTML = foodRows().map(([key, f]) => {
+    const query = searchKey($("#food-search").value);
+    const rows = foodRows().filter(([, f]) => searchKey(`${f.name} ${f.orig || ""}`).includes(query));
+    $("#food-empty").hidden = rows.length > 0;
+    $("#food-list").innerHTML = rows.map(([key, f]) => {
       const name = cap(f.name);
       const per = UNIT_LABEL[f.unit] || UNIT_LABEL.г;
       const edited = f.def != null && f.kcal !== f.def;
       const note = f.def == null ? "свой продукт" : f.note || "";
       return `<li class="f-item${edited ? " is-edited" : ""}" data-food="${esc(key)}" data-name="${esc(f.name)}" data-unit="${esc(f.unit)}">
-        <span><span class="f-name">${esc(name)}</span>${note ? `<span class="f-note f-def">${esc(note)}</span>` : ""}${f.def != null ? `<span class="f-note f-was">${esc(wasText(key, f.def))}</span>` : ""}</span>
-        <span class="f-in">
-          <input value="${f.kcal == null ? "" : esc(numText(f.kcal))}" placeholder="—" inputmode="decimal" autocomplete="off" enterkeyhint="done" maxlength="6" aria-label="${esc(name)}, ккал ${esc(per)}">
-          <span class="f-unit">ккал<br>${esc(per)}</span>
-          ${f.def != null ? `<button class="f-reset" type="button" aria-label="Вернуть ${esc(numText(f.def))}">${icon("i-undo")}</button>` : `<button class="f-del" type="button" aria-label="Удалить: ${esc(name)}">${icon("i-trash")}</button>`}
-        </span>
+        <span class="f-swipe" aria-hidden="true">Удалить</span>
+        <div class="f-row">
+          <span class="f-text"><button class="f-name" type="button" aria-label="${esc(name)}, переименовать">${esc(name)}</button>${f.orig && f.def != null ? `<span class="f-note">в плане: ${esc(f.orig)}</span>` : ""}${note ? `<span class="f-note f-def">${esc(note)}</span>` : ""}${f.def != null ? `<span class="f-note f-was">${esc(wasText(key, f.def))}</span>` : ""}</span>
+          <span class="f-in">
+            <input value="${f.kcal == null ? "" : esc(numText(f.kcal))}" placeholder="—" inputmode="decimal" autocomplete="off" enterkeyhint="done" maxlength="6" aria-label="${esc(name)}, ккал ${esc(per)}">
+            <span class="f-unit">ккал<br>${esc(per)}</span>
+            ${f.def != null ? `<button class="f-reset" type="button" aria-label="Вернуть ${esc(numText(f.def))}">${icon("i-undo")}</button>` : ""}
+          </span>
+          <button class="f-del" type="button" aria-label="Удалить: ${esc(name)}">${icon("i-x")}</button>
+        </div>
       </li>`;
     }).join("");
+  }
+
+  /* Переименование продукта */
+
+  function startRename(li) {
+    const id = li.dataset.food;
+    const input = document.createElement("input");
+    input.className = "f-rename";
+    // Escape возвращает это значение.
+    input.defaultValue = renamedFoods.get(id) || defaultKcal.get(id)?.text || li.dataset.name;
+    input.maxLength = 60;
+    input.autocomplete = "off";
+    input.enterKeyHint = "done";
+    input.setAttribute("aria-label", "Название продукта");
+    $(".f-name", li).replaceWith(input);
+    input.focus();
+    input.select();
+  }
+
+  // Название продукта в составе разбирается как продукт: в нём есть буквы и нет количества с единицей и «;».
+  const BAD_NAME = "В названии не должно быть количества и «;»";
+  function nameOk(name) {
+    const [part, ...rest] = FOODS.parseBody(`${name} 1 г`);
+    return !rest.length && part.item?.name === name && part.item.qty === 1 && !part.item.milk;
+  }
+
+  // Новое название не должно совпадать с другим продуктом, иначе его состав стал бы этим продуктом.
+  // Пустое поле возвращает название из плана или то, с которым продукт появился.
+  function renameFood(li, value) {
+    const id = li.dataset.food;
+    const first = firstName(id);
+    const name = value.replace(/\s+/g, " ").trim() || first;
+    if (searchKey(name) === searchKey(renamedFoods.get(id) || li.dataset.name)) {
+      renderFoods();
+      return;
+    }
+    if (!nameOk(name)) {
+      toast(BAD_NAME);
+      renderFoods();
+      return;
+    }
+    const key = FOODS.keyOf(name);
+    const used = usedFoods();
+    const table = kcalTable();
+    const clash = [...table.keys(), ...used.keys()].find((other) => other !== id && other.split("|")[0] === key);
+    if (clash) {
+      toast(`Такой продукт уже есть: ${cap((table.get(clash) || used.get(clash)).name)}`);
+      renderFoods();
+      return;
+    }
+    const before = foodKcal[id];
+    const names = (before?.a || []).filter((n) => n.toLowerCase() !== name.toLowerCase());
+    foodKcal[id] = { ...(before || { n: li.dataset.name, u: li.dataset.unit, h: [] }), a: [...names, name] };
+    syncNames();
+    saveFoods();
+    renderFoods();
   }
 
   /* Новый и удалённый продукт */
@@ -1035,6 +1163,11 @@
       nameInput.focus();
       return;
     }
+    if (!nameOk(name)) {
+      toast(BAD_NAME);
+      nameInput.focus();
+      return;
+    }
     if (kcal === null) {
       toast("Впишите калорийность");
       kcalInput.focus();
@@ -1047,20 +1180,24 @@
       showFood(id);
       return;
     }
-    // Продукта, которого нет ни в одном составе, нет и в прошедших днях, поэтому его калорийность действует
-    // с начала плана.
+    if (foodKcal[id]) delete foodKcal[id].off;
+    // Продукта, которого нет ни в плане, ни в одном составе, нет и в прошедших днях, поэтому его калорийность
+    // действует с начала плана.
     const start = days[0].iso < today ? days[0].iso : today;
-    setFoodKcal(id, name, unit, kcal, usedFoods().has(id) ? today : start);
+    const fresh = !defaultKcal.has(id) && !usedFoods().has(id);
+    setFoodKcal(id, name, unit, kcal, fresh ? start : today);
     toggleFoodForm(false);
+    $("#food-search").value = "";
     renderFoods();
     showFood(id);
   }
 
-  // Свой продукт пропадает из списков. Его калорийность остаётся у приёмов пищи и блюд, где он уже есть.
+  // Продукт пропадает из списков и с сегодняшнего дня из состава приёмов пищи и моих блюд. Прошедшие дни
+  // не меняются.
   function deleteFood(row) {
     const id = row.dataset.food;
     const before = foodKcal[id];
-    foodKcal[id] = { ...(before || { n: row.dataset.name, u: row.dataset.unit, h: [] }), off: true };
+    foodKcal[id] = { ...(before || { n: row.dataset.name, u: row.dataset.unit, h: [] }), off: today };
     saveFoods();
     renderFoods();
     toast(`Удалено: ${cap(row.dataset.name)}`, "Отменить", () => {
@@ -1406,11 +1543,12 @@
   }
 
   function dishHtml(id, dish, table) {
-    const { kcal, missing } = FOODS.delta([], itemsOf(dish.t), table);
+    const body = dishView(dish.t);
+    const { kcal, missing } = FOODS.delta([], itemsOf(body), table);
     return `<li class="recipe my-dish" data-dish="${esc(id)}">
       <button class="dish-row" type="button">
         <span class="r-head"><span class="r-name">${esc(dish.n)}</span><span class="r-kcal">${Math.round(kcal)}<small>ккал</small></span></span>
-        <span class="r-comp">${nbspUnits(esc(dish.t))}</span>
+        <span class="r-comp">${nbspUnits(esc(body))}</span>
         ${missing.length ? `<span class="r-uses">Нет калорийности: ${esc(missing.map(foodName).join(", "))}</span>` : ""}
       </button>
     </li>`;
@@ -1434,7 +1572,7 @@
       ${addFormHtml()}
       <div class="ed-missing" hidden></div>
       <label class="ed-label" for="comp-dish">Состав</label>
-      <textarea id="comp-dish" name="comp" rows="3" enterkeyhint="done">${esc(dish?.t || "")}</textarea>
+      <textarea id="comp-dish" name="comp" rows="3" enterkeyhint="done">${esc(dish ? dishView(dish.t) : "")}</textarea>
       <div class="p-actions">
         <button class="btn primary" type="button" data-dish-act="save">Сохранить</button>
         <button class="btn" type="button" data-dish-act="cancel">Отмена</button>
@@ -1750,6 +1888,8 @@
     const next = VIEWS[location.hash] || "plan";
     if (next === view) return;
     if (view === "plan" && homeY >= 0) planScroll = window.scrollY;
+    // «Отменить» в тосте относится к экрану, с которого ушли.
+    hideToast();
     endSwap();
     closePanel();
     closeDish();
@@ -1765,9 +1905,14 @@
     $("#to-today").hidden = true;
     if (next === "products") {
       toggleFoodForm(false);
+      $("#food-search").value = "";
       renderFoods();
     }
-    if (next === "recipes") renderDishes();
+    // В составе рецептов и моих блюд могли поменяться названия продуктов и уйти удалённые.
+    if (next === "recipes") {
+      renderRecipes();
+      renderDishes();
+    }
     if (next === "plan") showPlan();
     else window.scrollTo(0, 0);
   }
@@ -1826,6 +1971,11 @@
       else toggleKeep(keep.dataset.keep === "open");
       return;
     }
+    const renameBtn = t.closest(".f-name");
+    if (renameBtn) {
+      startRename(renameBtn.closest(".f-item"));
+      return;
+    }
     const reset = t.closest(".f-reset");
     if (reset) {
       const row = reset.closest(".f-item");
@@ -1866,6 +2016,11 @@
       startNewMeal(dayById.get(addMealBtn.closest(".day").dataset.day));
       return;
     }
+    const mealCopy = t.closest(".m-copy");
+    if (mealCopy) {
+      copyMeal(meals.get(mealCopy.closest(".meal").dataset.key), mealCopy);
+      return;
+    }
     const row = t.closest(".meal-row");
     if (row && swapFrom) {
       const li = row.closest(".meal");
@@ -1889,7 +2044,6 @@
       else if (name === "remove") removeMeal(key);
       else if (name === "delete") deleteAdded(key);
       else if (name === "swap") startSwap(key);
-      else if (name === "copy") copyMeal(meals.get(key), act);
       return;
     }
     const copyBtn = t.closest(".copy");
@@ -1946,7 +2100,11 @@
       }
       return;
     }
-    if (t.matches(".f-item input")) {
+    if (t.matches("#food-search")) {
+      renderFoods();
+      return;
+    }
+    if (t.matches(".f-in input")) {
       const row = t.closest(".f-item");
       setFoodKcal(row.dataset.food, row.dataset.name, row.dataset.unit, readNum(t.value));
       const f = kcalTable().get(row.dataset.food);
@@ -1962,17 +2120,35 @@
     }
   });
 
-  /* Свайп продукта в редакторе */
+  /* Свайп продукта в редакторе, приёма пищи и продукта на экране продуктов */
 
-  // Строка продукта едет за пальцем влево. Дальше порога продукт убирается, ближе возвращается на место.
-  // Вертикальное движение остаётся прокрутке (touch-action: pan-y у строки).
+  // Строка едет за пальцем влево. Дальше порога продукт или приём пищи убирается, ближе строка возвращается
+  // на место. Вертикальное движение остаётся прокрутке (touch-action: pan-y у строки).
   let swipe = null;
   // Время события, которым закончился свайп (event.timeStamp), чтобы погасить следующее за ним нажатие.
   let swipedAt = null;
 
+  // Пока открыт редактор, смахиваются только его продукты. Раскрытый и убранный приём пищи не смахиваются.
+  function swipeRow(target) {
+    if (target.closest("input")) return null;
+    if (ed) return target.closest(".ed-item:not(.is-removed) > .ed-row");
+    if (swapFrom) return null;
+    return target.closest(".meal:not(.is-open):not(.is-empty) > .meal-row, .f-item > .f-row");
+  }
+
+  function swipeDone(box) {
+    if (box.matches(".ed-item")) {
+      if (ed) setRemoved(box, true);
+    } else if (box.matches(".meal")) {
+      const key = box.dataset.key;
+      if (meals.get(key).added) deleteAdded(key);
+      else removeMeal(key);
+    } else deleteFood(box);
+  }
+
   document.addEventListener("pointerdown", (e) => {
-    const row = ed && e.isPrimary && e.button === 0 && e.target.closest(".ed-item:not(.is-removed) .ed-row");
-    if (!row || e.target.closest("input")) return;
+    const row = e.isPrimary && e.button === 0 && swipeRow(e.target);
+    if (!row) return;
     swipe = { row, id: e.pointerId, x: e.clientX, y: e.clientY, dx: 0, active: false };
   });
 
@@ -1988,7 +2164,7 @@
       }
       swipe.active = true;
       swipe.row.setPointerCapture?.(e.pointerId);
-      swipe.row.closest(".ed-item").classList.add("is-swiping");
+      swipe.row.parentElement.classList.add("is-swiping");
     }
     swipe.dx = Math.min(0, dx);
     swipe.row.style.transform = `translateX(${swipe.dx}px)`;
@@ -2000,7 +2176,7 @@
     swipe = null;
     if (!active) return;
     swipedAt = e.timeStamp;
-    const item = row.closest(".ed-item");
+    const box = row.parentElement;
     const width = row.offsetWidth;
     const done = !cancelled && -dx > Math.min(110, width * 0.35);
     row.style.transition = "transform 180ms var(--ease)";
@@ -2008,23 +2184,28 @@
     setTimeout(() => {
       row.style.transition = "";
       row.style.transform = "";
-      item.classList.remove("is-swiping");
-      if (done && ed && item.isConnected) setRemoved(item, true);
+      box.classList.remove("is-swiping");
+      if (done && box.isConnected) swipeDone(box);
     }, 180);
   }
 
   document.addEventListener("pointerup", (e) => endSwipe(e, false));
   document.addEventListener("pointercancel", (e) => endSwipe(e, true));
-  // Нажатие, которым закончился свайп, не нажимает кнопки степпера.
+  // Нажатие, которым закончился свайп, не нажимает кнопки степпера и не раскрывает строку.
   document.addEventListener("click", (e) => {
     if (swipedAt === null) return;
     const late = e.timeStamp - swipedAt > 400;
     swipedAt = null;
-    if (!late && e.target.closest(".ed-item")) {
+    if (!late && e.target.closest(".ed-item, .meal, .f-item")) {
       e.preventDefault();
       e.stopPropagation();
     }
   }, true);
+
+  // Новое название продукта сохраняется, когда уходишь из поля: нажатием «Готово» или в другое место.
+  document.addEventListener("focusout", (e) => {
+    if (e.target.matches(".f-rename")) renameFood(e.target.closest(".f-item"), e.target.value);
+  });
 
   // Поле количества или калорийности после ввода показывает число в обычном виде.
   document.addEventListener("change", (e) => {
@@ -2033,7 +2214,7 @@
     if (ed && t.matches("[name=add-food], [name=add-unit]")) syncAddForm();
     if (ed && t.matches(".ed-item input")) t.value = numText(qtyOf(Number(t.closest(".ed-item").dataset.i)));
     if (ed && t.matches(".ed-missing input")) setTimeout(() => ed && refreshEditor());
-    if (t.matches(".f-item input")) {
+    if (t.matches(".f-in input")) {
       const f = kcalTable().get(t.closest(".f-item").dataset.food);
       t.value = f?.kcal == null ? "" : numText(f.kcal);
     }
@@ -2042,8 +2223,11 @@
 
   document.addEventListener("keydown", (e) => {
     const t = e.target;
-    if (t.matches(".ed-item input, .f-item input, [data-food]") && e.key === "Enter") {
+    if (t.matches(".ed-item input, .f-item input, [data-food], #food-search") && e.key === "Enter") {
       e.preventDefault();
+      t.blur();
+    } else if (t.matches(".f-rename") && e.key === "Escape") {
+      t.value = t.defaultValue;
       t.blur();
     } else if (t.closest(".ed-add-form") && (e.key === "Enter" || e.key === "Escape")) {
       e.preventDefault();
