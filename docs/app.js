@@ -64,7 +64,8 @@
   // из плана («Менять ккал»), n: название моего блюда, at: время добавленного приёма пищи }.
   const edits = Object.fromEntries(Object.entries(load(EDITS_KEY)).filter(([, e]) => typeof e?.t === "string"));
   const weights = load(WEIGHTS_KEY);
-  // Мои блюда: { id: { n: название, t: состав без кода, ккал и кофе } }.
+  // Мои блюда: { id: { n: название, t: состав без кода, ккал и кофе, p: true у блюда, которое встаёт
+  // в приём пищи порцией, w: вес готового блюда в граммах, если его вписали } }.
   const myDishes = Object.fromEntries(Object.entries(load(DISHES_KEY)).filter(([, d]) => typeof d?.n === "string" && typeof d?.t === "string"));
   const newId = () => Date.now().toString(36);
 
@@ -367,6 +368,34 @@
     return FOODS.compose(parts, FOODS.adapt(parts, table, defaultKcal, false, droppedIn(table)).qtys, nameOf);
   }
 
+  // Ключ порции моего блюда с названием name в таблице калорийности.
+  const portionId = (name) => FOODS.foodId(FOODS.keyOf(FOODS.portionName(name)), "г");
+  // Порция моего блюда в составе: название в кавычках, как его пишет FOODS.portionName.
+  const isPortionItem = (item) => item.key.startsWith("«");
+
+  // Ккал на 100 г готового моего блюда в этот день. null, если веса нет или у продукта блюда нет калорийности.
+  // Вес вписан пользователем или посчитан суммой продуктов, кроме продуктов в штуках и пачках.
+  function per100Of(dish, iso, table = kcalTable(iso)) {
+    const items = itemsOf(dishView(dish.t, iso));
+    const weight = dish.w || FOODS.weightOf(items).grams;
+    const { kcal, missing } = FOODS.delta([], items, table);
+    return weight && !missing.length ? (kcal * 100) / weight : null;
+  }
+
+  // Калорийность для редактора: продукты и порции моих блюд (ккал на 100 г готового блюда). В итог дня ккал
+  // порции идут числом из правки, поэтому правка блюда не меняет приёмы пищи, куда его уже добавили.
+  // Блюдо, название которого в составе не разбирается как название продукта, порцией не считается.
+  function editorTable(iso) {
+    const products = kcalTable(iso);
+    const table = new Map(products);
+    for (const dish of Object.values(myDishes)) {
+      const name = FOODS.portionName(dish.n);
+      const per100 = dish.p && nameOk(name) ? per100Of(dish, iso, products) : null;
+      if (per100 !== null) table.set(portionId(dish.n), { name, unit: "г", kcal: per100, def: null, portion: true });
+    }
+    return table;
+  }
+
   // С какого дня действует своя калорийность продукта, которая видна сегодня.
   const kcalSince = (id) => foodKcal[id]?.h.filter(([d]) => d <= today).pop()?.[0];
 
@@ -625,12 +654,18 @@
     </div>`;
   }
 
+  // Моё блюдо, выбранное в поле «Блюдо» редактора li.
+  function pickedDish(li) {
+    const picked = $("[name=code]", li).value;
+    return picked.startsWith("dish:") ? myDishes[picked.slice(5)] : null;
+  }
+
   // Правка, которую сохранит редактор. Если код, ккал и состав совпали с блюдом из плана,
   // приём пищи остаётся блюдом из плана, с граммовкой под свою калорийность или из плана («Менять ккал»).
   function editorEntry(li) {
     const meal = meals.get(ed.key);
     const picked = $("[name=code]", li).value;
-    const dish = picked.startsWith("dish:") ? myDishes[picked.slice(5)] : null;
+    const dish = pickedDish(li);
     const entry = planEntry(meal, dish ? "" : picked, $("[name=kcal]", li).value.replace(/\D/g, ""), $("[name=comp]", li).value);
     if (dish) entry.n = dish.n;
     const time = $("[name=time]", li);
@@ -679,6 +714,9 @@
     }
     $(".ed-items", li).innerHTML = itemsHtml();
     refreshEditor();
+    // Блюдо добавили целиком продуктами, а потом сделали порцией: приём пищи открывается порцией с теми же ккал.
+    const dish = pickedDish(li);
+    if (dish?.p && foodPart($("[name=comp]", li).value) === foodPart(dishView(dish.t, ed.iso))) usePortion(dish);
     ed.initial = JSON.stringify(editorEntry(li));
   }
 
@@ -703,7 +741,10 @@
   // как будто оно стоит в плане на этом месте. Без кода состав остаётся прежним.
   function switchDish(code) {
     if (code.startsWith("dish:")) {
-      useMyDish(myDishes[code.slice(5)]);
+      const dish = myDishes[code.slice(5)];
+      if (dish.p && usePortion(dish)) return;
+      useMyDish(dish);
+      if (dish.p) toast(`У блюда «${dish.n}» не посчитать ккал на 100 г, поэтому оно встало продуктами`);
       return;
     }
     const meal = meals.get(ed.key);
@@ -722,12 +763,15 @@
     setMode(ed.mode);
   }
 
-  // Моё блюдо в поле «Блюдо»: его состав, кофе остаётся от приёма пищи. Ккал считаются по продуктам.
-  function useMyDish(dish) {
+  // Кофе приёма пищи из поля «Состав»: при выборе моего блюда он остаётся.
+  const coffeeOf = () => ($("[name=comp]", ed.li).value.match(COFFEE_RE) || []).map((c) => c.trim()).join(" ");
+  const withCoffee = (food, coffee) => (coffee && food ? `${food.replace(/[\s.]+$/, "")}. ${coffee}` : food || coffee);
+  // Состав без кофе и точки в конце.
+  const foodPart = (body) => body.replace(COFFEE_RE, "").replace(/[\s.]+$/, "").trim();
+
+  // Состав из моего блюда в редакторе приёма пищи. kcal: ккал приёма пищи, без него сумма продуктов.
+  function setDishBody(body, kcal) {
     const ta = $("[name=comp]", ed.li);
-    const coffee = (ta.value.match(COFFEE_RE) || []).map((c) => c.trim()).join(" ");
-    const food = dishView(dish.t, ed.iso);
-    const body = coffee && food ? `${food.replace(/[\s.]+$/, "")}. ${coffee}` : food || coffee;
     ed.from = undefined;
     const box = $(".ed-mode", ed.li);
     box.innerHTML = "";
@@ -736,10 +780,49 @@
     autosize(ta);
     ed.parts = FOODS.parseBody(body);
     ed.qtys = [];
-    ed.base = { kcal: Math.round(FOODS.delta([], currentItems(), kcalTable(ed.iso)).kcal), parts: ed.parts, sum: true };
+    ed.base = kcal === undefined
+      ? { kcal: Math.round(FOODS.delta([], currentItems(), editorTable(ed.iso)).kcal), parts: ed.parts, sum: true }
+      : { kcal, parts: ed.parts };
     $("[name=kcal]", ed.li).value = ed.base.kcal;
     $(".ed-items", ed.li).innerHTML = itemsHtml();
     refreshEditor();
+  }
+
+  // Моё блюдо в поле «Блюдо»: его состав, кофе остаётся от приёма пищи. Ккал считаются по продуктам.
+  function useMyDish(dish) {
+    setDishBody(withCoffee(dishView(dish.t, ed.iso), coffeeOf()));
+  }
+
+  // Моё блюдо порцией: одна строка «Торт» 100 г, кофе остаётся от приёма пищи. Если у прежнего состава
+  // без кофе были ккал, порция получает их. false, если ккал на 100 г у блюда не посчитать (нет веса или ккал).
+  function usePortion(dish) {
+    const table = editorTable(ed.iso);
+    if (!table.get(portionId(dish.n))?.kcal) return false;
+    const coffee = coffeeOf();
+    const body = withCoffee(FOODS.segmentText(FOODS.portionName(dish.n), 100, "г"), coffee);
+    const kcal = Number($("[name=kcal]", ed.li).value) || 0;
+    if (kcal - FOODS.delta([], itemsOf(coffee), table).kcal < 1) {
+      setDishBody(body);
+      return true;
+    }
+    const parts = FOODS.parseBody(body);
+    setDishBody(FOODS.compose(parts, FOODS.fitPortions(parts, [], kcal, table)), kcal);
+    return true;
+  }
+
+  // Ккал приёма пищи вписали руками: граммовка порций моих блюд подстраивается под них. Пропорция между
+  // порциями берётся из количества на момент входа в поле «Ккал» (fitFrom), промежуточные числа при наборе
+  // («2», «20») её не меняют.
+  function fitPortionsTo(kcal) {
+    const qtys = FOODS.fitPortions(ed.parts, ed.fitFrom || ed.qtys, kcal, editorTable(ed.iso));
+    if (!qtys.length) return;
+    qtys.forEach((qty, i) => {
+      ed.qtys[i] = qty;
+      $(`.ed-item[data-i="${i}"] input`, ed.li).value = numText(qty);
+    });
+    const ta = $("[name=comp]", ed.li);
+    ta.value = FOODS.compose(ed.parts, ed.qtys);
+    autosize(ta);
   }
 
   const qtyOf = (i) => ed.qtys[i] ?? ed.parts[i].item.qty;
@@ -885,7 +968,7 @@
   // Ккал пересчитываются от точки отсчёта: сколько было у блюда и каких продуктов стало больше или меньше.
   function refreshEditor() {
     const li = ed.li;
-    const table = kcalTable(ed.iso);
+    const table = editorTable(ed.iso);
     const baseQty = new Map();
     for (const p of ed.base.parts) if (p.item) baseQty.set(p.item.key, (baseQty.get(p.item.key) || 0) + p.item.qty * p.item.factor);
     const nowQty = new Map();
@@ -909,7 +992,9 @@
     // Экран продуктов пишет калорийность с сегодняшнего дня, поэтому прошедшему приёму пищи её вписывают здесь.
     const { kcal, missing: changed } = FOODS.delta(ed.base.parts, currentItems(), table);
     // В ккал, посчитанные суммой продуктов, продукт без калорийности не вошёл, даже если его количество не меняли.
-    const missing = ed.base.sum ? FOODS.delta([], currentItems(), table).missing : changed;
+    // Порция без калорийности (её моё блюдо удалили или переименовали) продуктом не становится, поэтому
+    // её в блоке нет.
+    const missing = (ed.base.sum ? FOODS.delta([], currentItems(), table).missing : changed).filter((item) => !isPortionItem(item));
     const box = $(".ed-missing", li);
     const past = ed.iso && ed.iso < today;
     if (!box.contains(document.activeElement)) {
@@ -924,14 +1009,18 @@
         : "";
     }
     if (ed.dish) {
-      $(".ed-day", li).innerHTML = `<b>${Math.round(kcal)}</b> ккал`;
+      const per100 = syncWeight(kcal);
+      const shown = per100 !== null && !missing.length;
+      $(".ed-day", li).innerHTML = `<b>${Math.round(kcal)}</b> ккал${shown ? `, ${Math.round(per100)} ккал на 100\xa0г` : ""}`;
       return;
     }
     const kcalInput = $("[name=kcal]", li);
     if (!missing.length && ed.base.kcal != null && (ed.base.kcal || currentItems().length) && document.activeElement !== kcalInput) {
       kcalInput.value = Math.max(0, Math.round(ed.base.kcal + kcal));
     }
-    $("[data-keep=open]", li).hidden = !$("[name=comp]", li).value.trim() || !$(".ed-keep", li).hidden;
+    // Ккал моего блюда считаются по калорийности продуктов, поэтому состав с порцией в мои блюда не сохраняется.
+    const portion = currentItems().some(({ item, qty }) => qty > 0 && isPortionItem(item));
+    $("[data-keep=open]", li).hidden = !$("[name=comp]", li).value.trim() || !$(".ed-keep", li).hidden || portion;
 
     const meal = meals.get(ed.key);
     const saved = dayTotal(meal.day);
@@ -1012,13 +1101,14 @@
   }
 
   // Продукты из правок и моих блюд: ключ из FOODS.foodId → название и единица, как продукт впервые встретился.
+  // Порции моих блюд («Торт» 54 г) продуктами не считаются.
   function usedFoods() {
     const used = new Map();
     const bodies = [...Object.values(edits).map((edit) => splitHead(edit.t).rest), ...Object.values(myDishes).map((dish) => dish.t)];
     for (const body of bodies) {
       for (const { item } of FOODS.parseBody(body)) {
         const id = item && FOODS.foodId(item.key, item.unit);
-        if (item && !used.has(id)) used.set(id, { name: foodName(item), unit: item.unit });
+        if (item && !used.has(id) && !isPortionItem(item)) used.set(id, { name: foodName(item), unit: item.unit });
       }
     }
     return used;
@@ -1509,7 +1599,9 @@
     const name = $("[name=keep-name]", ed.li).value.trim() || autoName(body);
     const id = dishByName(name) || newId();
     const before = myDishes[id];
-    myDishes[id] = { n: name, t: body };
+    myDishes[id] = { ...before, n: name, t: body };
+    // Вписанный вес относится к прежнему составу блюда.
+    delete myDishes[id].w;
     saveDishes();
     const select = $("[name=code]", ed.li);
     const code = select.value.startsWith("dish:") ? "" : select.value;
@@ -1545,10 +1637,12 @@
   function dishHtml(id, dish, table) {
     const body = dishView(dish.t);
     const { kcal, missing } = FOODS.delta([], itemsOf(body), table);
+    const per100 = dish.p ? per100Of(dish, null, table) : null;
     return `<li class="recipe my-dish" data-dish="${esc(id)}">
       <button class="dish-row" type="button">
         <span class="r-head"><span class="r-name">${esc(dish.n)}</span><span class="r-kcal">${Math.round(kcal)}<small>ккал</small></span></span>
         <span class="r-comp">${nbspUnits(esc(body))}</span>
+        ${dish.p ? `<span class="r-uses">Порцией${per100 !== null ? `, ${Math.round(per100)} ккал на 100\xa0г` : missing.length ? "" : ", нет веса"}</span>` : ""}
         ${missing.length ? `<span class="r-uses">Нет калорийности: ${esc(missing.map(foodName).join(", "))}</span>` : ""}
       </button>
     </li>`;
@@ -1564,9 +1658,21 @@
   let dishStart = null;
 
   function dishEditorHtml(dish) {
+    const portion = Boolean(dish?.p);
     return `<div class="editor dish-editor">
       <label class="ed-field ed-dish-name">Название<input name="dish-name" value="${esc(dish?.n || "")}" autocomplete="off" enterkeyhint="done" maxlength="60"></label>
       <p class="ed-day" aria-live="polite"></p>
+      <div class="ed-portion">
+        <p class="ed-label">В приём пищи</p>
+        <div class="seg" role="group" aria-label="В приём пищи">
+          <button type="button" data-portion="items" aria-pressed="${!portion}">Продуктами</button>
+          <button type="button" data-portion="portion" aria-pressed="${portion}">Порцией</button>
+        </div>
+        <div class="ed-weight"${portion ? "" : " hidden"}>
+          <label class="ed-field">Вес готового блюда<span class="ed-add-qty"><input name="dish-weight" value="${dish?.w || ""}" inputmode="numeric" pattern="[0-9]*" maxlength="5" autocomplete="off" enterkeyhint="done"><span class="unit">г</span></span></label>
+          <p class="ed-weight-note" hidden></p>
+        </div>
+      </div>
       <ul class="ed-items" aria-label="Количество продуктов"></ul>
       <p class="ed-hint">Смахните продукт влево, чтобы убрать его.</p>
       ${addFormHtml()}
@@ -1603,25 +1709,66 @@
     if (!id) $("[name=dish-name]", li).focus();
   }
 
-  // Название и состав, которые сохранит редактор блюда.
-  const dishDraft = () => JSON.stringify([$("[name=dish-name]", ed.li).value.trim(), $("[name=comp]", ed.li).value.replace(/\s*\n\s*/g, " ").trim()]);
+  const portionPressed = () => $('[data-portion="portion"]', ed.li).getAttribute("aria-pressed") === "true";
+  const typedWeight = () => Number($("[name=dish-weight]", ed.li).value.replace(/\D/g, ""));
+
+  // «Продуктами / Порцией» в редакторе моего блюда.
+  function setPortion(on) {
+    for (const b of ed.li.querySelectorAll("[data-portion]")) b.setAttribute("aria-pressed", String((b.dataset.portion === "portion") === on));
+    $(".ed-weight", ed.li).hidden = !on;
+    refreshEditor();
+  }
+
+  // Поле веса у блюда порцией: в подсказке вес суммой продуктов, под полем продукты, которые в эту сумму не вошли.
+  // Возвращает ккал на 100 г готового блюда (null у блюда продуктами и без веса). kcal: ккал всего блюда.
+  function syncWeight(kcal) {
+    const box = $(".ed-weight", ed.li);
+    if (box.hidden) return null;
+    const { grams, skipped } = FOODS.weightOf(currentItems().filter(({ qty }) => qty > 0));
+    const typed = typedWeight();
+    $("[name=dish-weight]", box).placeholder = grams ? String(Math.round(grams)) : "";
+    const note = $(".ed-weight-note", box);
+    note.textContent = !typed && skipped.length ? `Не вошли в вес: ${[...new Set(skipped.map(foodName))].join(", ")}` : "";
+    note.hidden = !note.textContent;
+    const weight = typed || grams;
+    return weight ? (kcal * 100) / weight : null;
+  }
+
+  // Почему открытое блюдо порцией нельзя сохранить под названием name, пустая строка, если можно. Порция стоит
+  // в составе приёма пищи под названием блюда, поэтому название разбирается как название продукта
+  // и отличает блюдо от других блюд порцией.
+  function portionNameIssue(name) {
+    if (!nameOk(FOODS.portionName(name))) return BAD_NAME;
+    const taken = Object.entries(myDishes).some(([id, d]) => id !== dishOpen && d.p && portionId(d.n) === portionId(name));
+    return taken ? "Блюдо порцией с таким названием уже есть" : "";
+  }
+
+  // Название, состав, «Порцией» и вписанный вес, которые сохранит редактор блюда.
+  const dishDraft = () => JSON.stringify([$("[name=dish-name]", ed.li).value.trim(), $("[name=comp]", ed.li).value.replace(/\s*\n\s*/g, " ").trim(), portionPressed(), typedWeight()]);
 
   // Как и у приёма пищи, черновик блюда сохраняется, когда уходишь из редактора. Без состава блюдо не сохраняется.
   function commitDish() {
     if (dishOpen === undefined) return;
     const draft = dishDraft();
-    const [name, body] = JSON.parse(draft);
+    const [name, body, portion, weight] = JSON.parse(draft);
     if (!body || draft === ed.initial) return;
     if (!dishOpen) dishOpen = newId();
-    myDishes[dishOpen] = { n: name || autoName(body), t: body };
+    myDishes[dishOpen] = { n: name || autoName(body), t: body, ...(portion && { p: true }), ...(weight && { w: weight }) };
     ed.initial = draft;
     saveDishes();
   }
 
   function closeDish(save) {
     if (dishOpen === undefined) return;
-    if (save && !JSON.parse(dishDraft())[1]) {
+    const [name, body, portion] = JSON.parse(dishDraft());
+    if (save && !body) {
       toast("Добавьте продукт или напишите состав");
+      return;
+    }
+    const issue = save && portion ? portionNameIssue(name || autoName(body)) : "";
+    if (issue) {
+      toast(issue);
+      $("[name=dish-name]", ed.li).focus();
       return;
     }
     commitDish();
@@ -1953,6 +2100,11 @@
       setMode(mode.dataset.mode);
       return;
     }
+    const portion = t.closest("[data-portion]");
+    if (portion && ed) {
+      setPortion(portion.dataset.portion === "portion");
+      return;
+    }
     const removeBtn = t.closest("[data-remove], [data-restore]");
     if (removeBtn && ed) {
       setRemoved(removeBtn.closest(".ed-item"), removeBtn.matches("[data-remove]"));
@@ -2078,9 +2230,12 @@
           applyQtys();
         }
       } else if (t.matches("[name=kcal]")) {
-        // Ккал вписаны руками: дальше считаем от них и от текущего состава.
+        // Ккал вписаны руками: порции моих блюд подстраиваются под них, дальше считаем от них и от текущего состава.
         const kcal = t.value.replace(/\D/g, "");
+        if (Number(kcal) > 0) fitPortionsTo(Number(kcal));
         ed.base = { kcal: kcal ? Number(kcal) : null, parts: FOODS.parseBody($("[name=comp]", ed.li).value) };
+        refreshEditor();
+      } else if (t.matches("[name=dish-weight]")) {
         refreshEditor();
       } else if (t.matches("[data-food]")) {
         // Калорийность, вписанная у прошедшего дня, действует с этого дня, чтобы приём пищи её увидел.
@@ -2201,6 +2356,10 @@
       e.stopPropagation();
     }
   }, true);
+
+  document.addEventListener("focusin", (e) => {
+    if (ed && e.target.matches("[name=kcal]")) ed.fitFrom = [...ed.qtys];
+  });
 
   // Новое название продукта сохраняется, когда уходишь из поля: нажатием «Готово» или в другое место.
   document.addEventListener("focusout", (e) => {

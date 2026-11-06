@@ -617,6 +617,10 @@ body[data-view="plan"] [data-for="sub"] { display: none !important; }
 .ed-day b { font: 600 13.5px var(--f-num); color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .ed-mode { margin: 0 0 12px; }
 .ed-mode .seg { margin: 0; }
+.ed-portion { margin: 0 0 12px; }
+.ed-portion .seg { margin: 0; }
+.ed-weight { margin-top: 10px; }
+.ed-weight-note { margin: 6px 2px 0; font-size: 12.5px; color: var(--ink-3); }
 
 .ed-items {
   list-style: none;

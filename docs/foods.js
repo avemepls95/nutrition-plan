@@ -162,6 +162,10 @@
   // Кофе для добавления в состав: «Кофе + 20 мл молока 3%».
   const coffeeText = (milk, qty) => `Кофе + ${fmt(qty)} мл ${milk.replace(/^молоко/, "молока")}`;
 
+  // Моё блюдо порцией стоит в составе под названием в кавычках («Торт» 54 г). Кавычки отличают его
+  // от продукта с тем же названием, кавычки внутри названия становятся „лапками“.
+  const portionName = (name) => (/^«.*»$/u.test(name) ? name : `«${name.replace(/«/g, "„").replace(/»/g, "“")}»`);
+
   // Добавляет часть в конец состава, после последнего продукта и перед тем, что идёт за ним:
   // «; огурец 100 г. Кофе + 20 мл молока 3%.» или «; огурец 100 г. За 1–1,5 часа до тренировки.»
   // Кофе встаёт в самый конец отдельным предложением.
@@ -273,6 +277,39 @@
     return Math.max(whole ? 1 : 0.1, q);
   }
 
+  // Вес продуктов в граммах, миллилитры считаются как граммы. У продуктов в штуках и пачках веса в граммах нет,
+  // они возвращаются в skipped.
+  function weightOf(items) {
+    let grams = 0;
+    const skipped = [];
+    for (const { item, qty } of items) {
+      if (unitKind(item.unit) === "г") grams += qty * item.factor;
+      else skipped.push(item);
+    }
+    return { grams, skipped };
+  }
+
+  // Количество порций моих блюд (у них в таблице калорийности portion), при котором состав набирает kcal ккал.
+  // Порции делят то, что остаётся после остальных продуктов, в прежней пропорции. qtys: новое количество
+  // по номеру части, как в compose. Возвращает новое количество порций по номеру части.
+  function fitPortions(parts, qtys, kcal, table) {
+    const own = [];
+    let ownKcal = 0;
+    let rest = 0;
+    parts.forEach(({ item }, i) => {
+      const qty = item && (qtys[i] ?? item.qty);
+      if (!qty) return;
+      const k = kcalOf(item.key, qty, item.unit, item.factor, table) ?? 0;
+      if (table.get(foodId(item.key, item.unit))?.portion) {
+        own.push([i, qty]);
+        ownKcal += k;
+      } else rest += k;
+    });
+    const out = [];
+    if (ownKcal > 0) for (const [i, qty] of own) out[i] = roundQty(parts[i].item, (qty * (kcal - rest)) / ownKcal);
+    return out;
+  }
+
   // Состав под свою калорийность продуктов. table: калорийность в этот день, defaults: по умолчанию.
   // keepKcal: граммовка продукта меняется так, чтобы его ккал остались как по калорийности по умолчанию,
   // иначе граммовка прежняя. qtys: новое количество по номеру части. extra: сколько прибавить к ккал из текста
@@ -346,7 +383,7 @@
     return base !== undefined && (base - qty) * (base - value) < 0 ? base : value;
   }
 
-  const api = { DEFAULTS, COFFEE_RE, keyOf, setAliases, unitKind, foodId, parseBody, segmentText, coffeeText, addSegment, compose, kcalOf, delta, adapt, valueAt, withValue, stepQty, fmt, num };
+  const api = { DEFAULTS, COFFEE_RE, keyOf, setAliases, unitKind, foodId, parseBody, segmentText, coffeeText, portionName, addSegment, compose, kcalOf, delta, adapt, weightOf, fitPortions, valueAt, withValue, stepQty, fmt, num };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.FOODS = api;
 })(typeof window !== "undefined" ? window : globalThis);

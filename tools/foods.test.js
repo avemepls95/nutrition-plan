@@ -492,3 +492,172 @@ test("delta: у кофе стало больше молока => ккал рас
   // Assert
   assert.deepEqual(result, { kcal: 6, missing: [] });
 });
+
+const itemsOf = (body) => FOODS.parseBody(body).flatMap((p) => (p.item ? [{ item: p.item, qty: p.item.qty }] : []));
+
+test("weightOf: граммы, миллилитры и килограммы => сумма в граммах", () => {
+  // Arrange
+  const items = itemsOf("мука 300 г; кефир 1,5% 200 мл; сахар 0,2 кг");
+
+  // Act
+  const result = FOODS.weightOf(items);
+
+  // Assert
+  assert.deepEqual(result, { grams: 700, skipped: [] });
+});
+
+test("weightOf: яйца в штуках и попкорн в пачках => в вес не входят, стоят в skipped", () => {
+  // Arrange
+  const items = itemsOf("мука 300 г; яйца 4 шт.; попкорн Just a Moment ½ пачки");
+
+  // Act
+  const result = FOODS.weightOf(items);
+
+  // Assert
+  assert.equal(result.grams, 300);
+  assert.deepEqual(result.skipped.map((item) => item.name), ["яйца", "попкорн Just a Moment"]);
+});
+
+test("portionName: обычное название => в кавычках", () => {
+  // Act
+  const result = FOODS.portionName("Торт");
+
+  // Assert
+  assert.equal(result, "«Торт»");
+});
+
+test("portionName: название целиком в кавычках => как есть", () => {
+  // Act
+  const result = FOODS.portionName("«Наполеон»");
+
+  // Assert
+  assert.equal(result, "«Наполеон»");
+});
+
+test("portionName: кавычки внутри названия => внутренние становятся „лапками“", () => {
+  // Act
+  const result = FOODS.portionName("Торт «Наполеон»");
+
+  // Assert
+  assert.equal(result, "«Торт „Наполеон“»");
+});
+
+test("parseBody: порция моего блюда => продукт в граммах с ключом в кавычках", () => {
+  // Arrange
+  const text = FOODS.segmentText(FOODS.portionName("Торт"), 54, "г");
+
+  // Act
+  const [part, ...rest] = FOODS.parseBody(text);
+
+  // Assert
+  assert.equal(rest.length, 0);
+  assert.deepEqual([part.item.name, part.item.key, part.item.qty, part.item.unit], ["«Торт»", "«торт»", 54, "г"]);
+});
+
+// Калорийность с порциями моих блюд: торт 400 ккал на 100 г, пирог 200.
+const portionTable = () => {
+  const table = new Map([...defaults].map(([id, entry]) => [id, { ...entry }]));
+  table.set("«торт»|г", { unit: "г", kcal: 400, portion: true });
+  table.set("«пирог»|г", { unit: "г", kcal: 200, portion: true });
+  return table;
+};
+
+test("fitPortions: в составе только порция торта, 200 ккал => 50 г", () => {
+  // Arrange
+  const parts = FOODS.parseBody("«Торт» 100 г");
+
+  // Act
+  const result = FOODS.fitPortions(parts, [], 200, portionTable());
+
+  // Assert
+  assert.deepEqual(result, [50]);
+});
+
+test("fitPortions: порция и кофе => порция получает ккал, которые остаются после кофе", () => {
+  // Arrange
+  const parts = FOODS.parseBody("«Торт» 100 г. Кофе + 20 мл молока 3%.");
+
+  // Act
+  const result = FOODS.fitPortions(parts, [], 200, portionTable());
+
+  // Assert
+  assert.equal(result[0], 47);
+  assert.equal(result[1], undefined);
+});
+
+test("fitPortions: две порции => делят ккал в прежней пропорции", () => {
+  // Arrange
+  const parts = FOODS.parseBody("«Торт» 100 г; «Пирог» 50 г");
+
+  // Act
+  const result = FOODS.fitPortions(parts, [], 250, portionTable());
+
+  // Assert
+  assert.deepEqual(result, [50, 25]);
+});
+
+test("fitPortions: ккал меньше, чем у кофе => порция весит 1 г", () => {
+  // Arrange
+  const parts = FOODS.parseBody("«Торт» 100 г. Кофе + 20 мл молока 3%.");
+
+  // Act
+  const result = FOODS.fitPortions(parts, [], 5, portionTable());
+
+  // Assert
+  assert.equal(result[0], 1);
+});
+
+test("fitPortions: порций в составе нет => количество не меняется", () => {
+  // Arrange
+  const parts = FOODS.parseBody("банан 100 г; хлеб 40 г");
+
+  // Act
+  const result = FOODS.fitPortions(parts, [], 200, portionTable());
+
+  // Assert
+  assert.equal(result.length, 0);
+});
+
+test("fitPortions: порция убрана => количество не меняется", () => {
+  // Arrange
+  const parts = FOODS.parseBody("«Торт» 100 г; банан 100 г");
+
+  // Act
+  const result = FOODS.fitPortions(parts, [0], 200, portionTable());
+
+  // Assert
+  assert.equal(result.length, 0);
+});
+
+test("fitPortions: блюда порции нет в таблице (его удалили) => количество не меняется", () => {
+  // Arrange
+  const parts = FOODS.parseBody("«Медовик» 80 г");
+
+  // Act
+  const result = FOODS.fitPortions(parts, [], 200, portionTable());
+
+  // Assert
+  assert.equal(result.length, 0);
+});
+
+test("fitPortions: количество порций меняли степпером => делят ккал в пропорции нового количества", () => {
+  // Arrange
+  const parts = FOODS.parseBody("«Торт» 100 г; «Пирог» 50 г");
+
+  // Act
+  const result = FOODS.fitPortions(parts, [50, 50], 150, portionTable());
+
+  // Assert
+  assert.deepEqual(result, [25, 25]);
+});
+
+test("weightOf: литры => в граммах", () => {
+  // Arrange
+  const items = itemsOf("молоко 3% 0,5 л");
+
+  // Act
+  const result = FOODS.weightOf(items);
+
+  // Assert
+  assert.deepEqual(result, { grams: 500, skipped: [] });
+});
