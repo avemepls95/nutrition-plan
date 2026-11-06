@@ -14,16 +14,13 @@
   const WD_SHORT = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
   const LABELS = { B: "завтрак", M: "обед", S: "перекус", D: "ужин", E: "вечер", F: "десерт", K: "кино" };
   const PRE_TRAINING = new Set(["S4", "F4"]);
-  // По справке плана «Кофе × 2 ≈24 ккал».
-  const COFFEE_KCAL = 12;
   const BAR_COLOR = { light: "#2b5b5e", dark: "#16302f" };
 
   const CODE_RE = /^\s*([A-Z]{1,2}\d{1,2})\s*·\s*/;
   // В правке ккал записаны по калорийности по умолчанию. Если ккал вписаны руками меньше, чем дают
   // продукты со своей калорийностью, число в правке меньше нуля.
   const KCAL_RE = /^≈?\s*(-?\d+)\s*ккал\.?\s*/;
-  // Объём молока и жирность в правках могут быть любыми.
-  const COFFEE_RE = /\s*Кофе\s*\+\s*(\d+(?:[.,]\d+)?)\s*мл\s+молока(?:\s+(\d+(?:[.,]\d+)?)\s*%)?\.?/giu;
+  const { COFFEE_RE } = FOODS;
   // В тексте из плана после состава идут пояснения с заглавной буквы: «За 1–1,5 часа до тренировки.»
   const NOTE_RE = /\.\s+(?=[А-ЯЁA-Z])/;
   const HEBREW_RE = /\p{Script=Hebrew}+(?:\s+\p{Script=Hebrew}+)*/gu;
@@ -213,14 +210,12 @@
 
   function parse(text, plain) {
     const { code, kcal, rest: head } = splitHead(text);
-    const coffee = [...head.matchAll(COFFEE_RE)].map((m) => ({ ml: m[1], fat: m[2] || "" }));
+    const coffee = [...head.matchAll(COFFEE_RE)].map((m) => ({ ml: m.groups.ml, fat: m.groups.fat || "" }));
     const rest = head.replace(COFFEE_RE, "").trim();
     const split = cutNote(rest);
     if (plain || planNotes.has(split.note)) return { code, kcal, coffee, ...split };
     return { code, kcal, coffee, body: rest, note: "" };
   }
-
-  const copyLine = (text) => text.replace(COFFEE_RE, "").replace(/\s{2,}/g, " ").trim();
 
   function labelOf(code) {
     if (!code) return "приём пищи";
@@ -234,34 +229,32 @@
     return "EFK".includes(code[0]) ? "evening" : code[0];
   }
 
-  const planKcal = (meal) => splitHead(meal.text).kcal || 0;
-
   // Приём пищи с учётом своей калорийности продуктов в этот день. Блюдо из плана держит ккал, граммовка
   // продуктов подстраивается. Правка и блюдо с «Менять ккал» держат граммовку, пересчитываются ккал.
-  // edit: правка приёма пищи (по умолчанию сохранённая), null для блюда из плана.
+  // edit: правка приёма пищи (по умолчанию сохранённая), null для блюда из плана. table: калорийность продуктов.
   // text: что показывать и копировать. kcal: ккал для итога дня, у правки без числа как в плане, у убранного 0.
-  function shownOf(meal, edit = edits[meal.key]) {
+  // В тексте плана и правки ккал записаны без кофе, ккал кофе прибавляются по его молоку.
+  function shownOf(meal, edit = edits[meal.key], table = kcalTable(meal.day.iso)) {
     const text = edit ? edit.t : meal.text;
     if (!text.trim()) return { text: "", kcal: 0 };
     const keepKcal = (!edit || planTexts.has(edit.t)) && edit?.mode !== "kcal";
     const { code, kcal, rest } = splitHead(text);
     const parts = FOODS.parseBody(rest);
-    const { qtys, extra } = FOODS.adapt(parts, kcalTable(meal.day.iso), defaultKcal, keepKcal);
+    const { qtys, extra } = FOODS.adapt(parts, table, defaultKcal, keepKcal);
     const total = (k) => Math.max(0, k + Math.round(extra));
     return {
       text: compose(code, kcal == null ? "" : String(total(kcal)), FOODS.compose(parts, qtys)),
-      kcal: total(kcal ?? planKcal(meal)),
+      kcal: total(kcal ?? (splitHead(meal.text).kcal || 0)),
     };
   }
 
-  const cupsKcal = (text) => COFFEE_KCAL * (text.match(COFFEE_RE) || []).length;
+  // Приём пищи из плана по калорийности продуктов по умолчанию, вместе с кофе. Из таких ккал сложен итог дня в PDF.
+  const planDefault = (meal) => shownOf(meal, null, defaultKcal);
 
-  // Итог из PDF уже включает кофе, поэтому к нему прибавляется только разница с планом.
+  // К итогу из PDF прибавляется только разница с планом.
   // editOf: правка приёма пищи, по умолчанию сохранённая. Редактор подставляет ещё не сохранённую.
-  const dayTotal = (day, editOf = (m) => edits[m.key]) => day.kcal + day.meals.reduce((sum, m) => {
-    const edit = editOf(m);
-    return sum + shownOf(m, edit).kcal + cupsKcal(edit ? edit.t : m.text) - planKcal(m) - cupsKcal(m.text);
-  }, 0);
+  const dayTotal = (day, editOf = (m) => edits[m.key]) =>
+    day.kcal + day.meals.reduce((sum, m) => sum + shownOf(m, editOf(m)).kcal - planDefault(m).kcal, 0);
 
   // Итог дня без правок: план, пересчитанный под свою калорийность продуктов.
   const planTotal = (day) => dayTotal(day, () => null);
@@ -331,6 +324,9 @@
 
   // С какого дня действует своя калорийность продукта, которая видна сегодня.
   const kcalSince = (id) => foodKcal[id]?.h.filter(([d]) => d <= today).pop()?.[0];
+
+  // Название продукта из состава на экране продуктов. У кофе это его молоко.
+  const foodName = (item) => item.milk || item.name;
 
   function setFoodKcal(id, name, unit, value, from = today) {
     const hist = FOODS.withValue(foodKcal[id]?.h || [], from, value === defaultKcal.get(id)?.kcal ? null : value);
@@ -457,7 +453,8 @@
     if (p.note) parts.push(`<p class="p-note">${esc(p.note)}</p>`);
     // У S4 и F4 шаг рецепта повторяет пояснение из плана.
     if (recipe) for (const step of recipe.steps) if (step !== p.note) parts.push(`<p>${esc(step)}</p>`);
-    if (!meal.added && (edit || shownOf(meal).text !== meal.text)) parts.push(`<p class="p-orig"><b>В плане</b>${esc(meal.text)}</p>`);
+    const plan = planDefault(meal).text;
+    if (!meal.added && (edit || shownOf(meal).text !== plan)) parts.push(`<p class="p-orig"><b>В плане</b>${esc(plan)}</p>`);
     const actions = [`<button class="btn" type="button" data-act="edit">Изменить</button>`];
     if (meal.day.iso && !meal.added) actions.push(`<button class="btn" type="button" data-act="swap">Поменять</button>`);
     if (text.trim()) actions.push(`<button class="btn" type="button" data-act="copy">${icon("i-copy")}Копировать</button>`);
@@ -727,18 +724,27 @@
 
   /* Добавление продукта */
 
-  // Обычное количество продукта в плане, им заполняется поле при добавлении.
+  const OTHER_FOOD = "__other";
+  const COFFEE_FOOD = "__coffee";
+
+  // Обычное количество продукта в плане, им заполняется поле при добавлении. planCoffee: кофе из плана.
   const typicalQty = new Map();
+  let planCoffee = null;
   for (const text of PLAN.texts) {
     for (const { item } of FOODS.parseBody(splitHead(text).rest)) {
-      const id = item && FOODS.foodId(item.key, item.unit);
-      if (item && !typicalQty.has(id)) typicalQty.set(id, item.qty);
+      if (!item) continue;
+      if (item.milk && !planCoffee) planCoffee = item;
+      const id = item.milk ? COFFEE_FOOD : FOODS.foodId(item.key, item.unit);
+      if (!typicalQty.has(id)) typicalQty.set(id, item.qty);
     }
   }
-  const OTHER_FOOD = "__other";
 
+  // Продукты экрана продуктов и кофе. Кофе относится к приёму пищи, поэтому в моё блюдо его не добавляют.
   function addOptions() {
-    const options = foodRows().map(([id, f]) => `<option value="${esc(id)}">${esc(cap(f.name))}${id.includes("|") ? `, ${esc(f.unit)}` : ""}</option>`);
+    const rows = foodRows().map(([id, f]) => [id, `${cap(f.name)}${id.includes("|") ? `, ${f.unit}` : ""}`]);
+    if (planCoffee && !ed?.dish) rows.push([COFFEE_FOOD, cap(planCoffee.name)]);
+    rows.sort(([, a], [, b]) => a.localeCompare(b, "ru"));
+    const options = rows.map(([id, label]) => `<option value="${esc(id)}">${esc(label)}</option>`);
     return `<option value="" disabled selected>Выберите продукт</option>${options.join("")}<option value="${OTHER_FOOD}">Другой продукт…</option>`;
   }
 
@@ -750,6 +756,7 @@
       const name = $("[name=add-name]", form).value.trim();
       return { id, name, unit: $("[name=add-unit]", form).value };
     }
+    if (id === COFFEE_FOOD) return { id, name: planCoffee.name, unit: planCoffee.unit, coffee: planCoffee };
     const entry = id && kcalTable(ed.iso).get(id);
     const custom = foodKcal[id];
     if (!id) return null;
@@ -781,7 +788,7 @@
   }
 
   // Продукт, который уже есть в составе, получает добавленное количество, убранный возвращается с ним.
-  // Новый встаёт в конец состава, перед кофе или пояснением.
+  // Новый встаёт в конец состава, перед кофе или пояснением. Кофе встаёт в самый конец.
   function addProduct() {
     const form = $(".ed-add-form", ed.li);
     const choice = addChoice();
@@ -794,14 +801,15 @@
       $("[name=add-qty]", form).focus();
       return;
     }
-    const key = FOODS.keyOf(choice.name);
+    const key = choice.coffee ? choice.coffee.key : FOODS.keyOf(choice.name);
     const i = ed.parts.findIndex((p) => p.item && p.item.key === key && FOODS.unitKind(p.item.unit) === FOODS.unitKind(choice.unit));
     if (i >= 0 && ed.parts[i].item.factor === 1) {
       ed.qtys[i] = round1(qtyOf(i) + qty);
       applyQtys();
     } else {
       const ta = $("[name=comp]", ed.li);
-      ta.value = FOODS.addSegment(ta.value, FOODS.segmentText(choice.name, round1(qty), choice.unit));
+      const segment = choice.coffee ? FOODS.coffeeText(choice.coffee.milk, round1(qty)) : FOODS.segmentText(choice.name, round1(qty), choice.unit);
+      ta.value = FOODS.addSegment(ta.value, segment);
       autosize(ta);
       ed.parts = FOODS.parseBody(ta.value);
       ed.qtys = [];
@@ -849,7 +857,8 @@
       box.innerHTML = items.length
         ? `<p>Нет калорийности, поэтому ккал не пересчитаны. ${past ? `Впишите её здесь, она будет действовать с ${dateShort(ed.iso)}.` : "Впишите её здесь или на экране продуктов."}</p>${items.map((item) => {
           const per = UNIT_LABEL[item.unit];
-          return `<label><span>${esc(cap(item.name))}</span><input data-food="${esc(FOODS.foodId(item.key, item.unit))}" data-name="${esc(item.name)}" data-unit="${esc(item.unit)}" inputmode="decimal" autocomplete="off" enterkeyhint="done" maxlength="6" aria-label="${esc(cap(item.name))}, ккал ${esc(per)}"><span class="f-unit">ккал<br>${esc(per)}</span></label>`;
+          const name = foodName(item);
+          return `<label><span>${esc(cap(name))}</span><input data-food="${esc(FOODS.foodId(item.key, item.unit))}" data-name="${esc(name)}" data-unit="${esc(item.unit)}" inputmode="decimal" autocomplete="off" enterkeyhint="done" maxlength="6" aria-label="${esc(cap(name))}, ккал ${esc(per)}"><span class="f-unit">ккал<br>${esc(per)}</span></label>`;
         }).join("")}`
         : "";
     }
@@ -941,14 +950,14 @@
     return `по плану ${numText(def)}${since ? `, своё с ${dateShort(since)}` : ""}`;
   }
 
-  // Продукты из правок и моих блюд: ключ из FOODS.foodId → продукт в том виде, как он впервые встретился.
+  // Продукты из правок и моих блюд: ключ из FOODS.foodId → название и единица, как продукт впервые встретился.
   function usedFoods() {
     const used = new Map();
     const bodies = [...Object.values(edits).map((edit) => splitHead(edit.t).rest), ...Object.values(myDishes).map((dish) => dish.t)];
     for (const body of bodies) {
       for (const { item } of FOODS.parseBody(body)) {
         const id = item && FOODS.foodId(item.key, item.unit);
-        if (item && !used.has(id)) used.set(id, item);
+        if (item && !used.has(id)) used.set(id, { name: foodName(item), unit: item.unit });
       }
     }
     return used;
@@ -1402,7 +1411,7 @@
       <button class="dish-row" type="button">
         <span class="r-head"><span class="r-name">${esc(dish.n)}</span><span class="r-kcal">${Math.round(kcal)}<small>ккал</small></span></span>
         <span class="r-comp">${nbspUnits(esc(dish.t))}</span>
-        ${missing.length ? `<span class="r-uses">Нет калорийности: ${esc(missing.map((item) => item.name).join(", "))}</span>` : ""}
+        ${missing.length ? `<span class="r-uses">Нет калорийности: ${esc(missing.map(foodName).join(", "))}</span>` : ""}
       </button>
     </li>`;
   }
@@ -1616,11 +1625,11 @@
     toast(`Скопировано: ${what}`);
   }
 
-  const copyDay = (day, btn) => copyText(day.meals.map((m) => copyLine(shownOf(m).text)).filter(Boolean).join("\n"), btn, dayShort(day));
+  const copyDay = (day, btn) => copyText(day.meals.map((m) => shownOf(m).text).filter(Boolean).join("\n"), btn, dayShort(day));
 
   function copyMeal(meal, btn) {
     const text = shownOf(meal).text;
-    copyText(copyLine(text), btn, `${labelOf(splitHead(text).code)}, ${dayShort(meal.day)}`);
+    copyText(text, btn, `${labelOf(splitHead(text).code)}, ${dayShort(meal.day)}`);
   }
 
   /* Сообщения */

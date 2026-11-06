@@ -1,5 +1,5 @@
 // Проверяет калорийность продуктов в docs/foods.js: сумма продуктов каждого блюда плана
-// должна отличаться от ккал блюда не больше чем на 1,5.
+// должна отличаться от ккал блюда не больше чем на 1,5. Кофе в ккал блюда не входит.
 // Запуск: node tools/check_foods.js
 "use strict";
 
@@ -23,7 +23,7 @@ for (const text of window.PLAN.texts) {
   let sum = 0;
   const unknown = [];
   for (const { item } of FOODS.parseBody(text.slice(head[0].length))) {
-    if (!item) continue;
+    if (!item || item.milk) continue;
     const kcal = FOODS.kcalOf(item.key, item.qty, item.unit, item.factor, table);
     if (kcal === null) unknown.push(item.name);
     else sum += kcal;

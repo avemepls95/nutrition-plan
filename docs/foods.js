@@ -45,8 +45,8 @@
 
   const FRACTIONS = { "½": 0.5, "¼": 0.25, "¾": 0.75, "⅓": 1 / 3, "⅔": 2 / 3 };
   const NUM = "(\\d+(?:[.,]\\d+)?|[½¼¾⅓⅔])";
-  // Первое число с единицей измерения в части состава: «молоко 3% 140 мл» → 140 мл.
-  const QTY_RE = new RegExp(`(^|[\\s(])${NUM}(\\s*)(кг|г|мл|л|шт\\.?|пач(?:ка|ки|ку|ек))(?=$|[\\s.,;:)])`, "u");
+  // Первое число с единицей измерения в части состава: «молоко 3% 140 мл» → 140 мл, «Кофе+20 мл» → 20 мл.
+  const QTY_RE = new RegExp(`(^|[\\s(+])${NUM}(\\s*)(кг|г|мл|л|шт\\.?|пач(?:ка|ки|ку|ек))(?=$|[\\s.,;:)])`, "u");
   // Пояснение после количества («сырая / ≈90 г готовая», «(≈20 шт.)») заканчивается там, где начинается новое предложение.
   const SENTENCE_RE = /^\s+(?=[А-ЯЁA-Z])|\.\s+(?=[А-ЯЁA-Z])|\.\s*$/u;
   const ANNOT_RE = new RegExp(`(≈\\s*)?${NUM}(\\s*)(г|мл|шт\\.?|ч\\.\\s?л\\.|ст\\.\\s?л\\.)`, "gu");
@@ -54,6 +54,14 @@
     г: ["г", 1], кг: ["г", 1000], мл: ["мл", 1], л: ["мл", 1000],
     "шт.": ["шт.", 1], шт: ["шт.", 1], пачка: ["пачка", 1], пачки: ["пачка", 1], пачку: ["пачка", 1], пачек: ["пачка", 1],
   };
+
+  // Кофе после завтрака и обеда пишется отдельным предложением: «Кофе + 20 мл молока 3%.» Его ккал считаются
+  // по молоку. Объём молока и жирность в правках могут быть любыми.
+  const COFFEE = "кофе\\s*\\+\\s*(?<ml>\\d+(?:[.,]\\d+)?)\\s*мл\\s+молока(?:\\s+(?<fat>\\d+(?:[.,]\\d+)?)\\s*%)?";
+  const COFFEE_RE = new RegExp(`\\s*${COFFEE}\\.?`, "giu");
+  const COFFEE_START_RE = new RegExp(`^\\s*${COFFEE}`, "iu");
+  // Ключ кофе в составе: «кофе|молоко 3%». Калорийность у него как у молока.
+  const COFFEE_KEY = "кофе|";
 
   const num = (s) => FRACTIONS[s] ?? Number(s.replace(",", "."));
 
@@ -75,10 +83,9 @@
     return "пачек";
   }
 
-  // Часть состава между «;»: продукт с количеством или просто текст.
+  // Часть состава: продукт с количеством или просто текст.
   function parseSegment(text) {
-    // «Кофе + 20 мл молока 3%» показывается отдельно и в продукты не входит.
-    const m = /^\s*кофе(?!\p{L})/iu.test(text) ? null : text.match(QTY_RE);
+    const m = text.match(QTY_RE);
     if (!m) return { text };
     const numStart = m.index + m[1].length;
     const name = text.slice(0, numStart).trim();
@@ -87,26 +94,32 @@
     const rest = text.slice(unitEnd);
     const cut = rest.search(SENTENCE_RE);
     const [unit, factor] = UNITS[m[4]] || UNITS[m[4].replace(/\.$/, "")];
-    return {
-      text,
-      item: {
-        name,
-        key: keyOf(name),
-        qty: num(m[2]),
-        unit,
-        factor,
-        head: text.slice(0, numStart),
-        space: m[3],
-        unitWord: m[4],
-        annot: cut < 0 ? rest : rest.slice(0, cut),
-        tail: cut < 0 ? "" : rest.slice(cut),
-      },
+    const item = {
+      name,
+      key: keyOf(name),
+      qty: num(m[2]),
+      unit,
+      factor,
+      head: text.slice(0, numStart),
+      space: m[3],
+      unitWord: m[4],
+      annot: cut < 0 ? rest : rest.slice(0, cut),
+      tail: cut < 0 ? "" : rest.slice(cut),
     };
+    // Количество у кофе это объём молока.
+    const coffee = text.match(COFFEE_START_RE);
+    if (coffee) {
+      item.milk = coffee.groups.fat ? `молоко ${coffee.groups.fat}%` : "молоко";
+      item.name = `кофе с ${item.milk.replace(/^молоко/, "молоком")}`;
+      item.key = COFFEE_KEY + keyOf(item.milk);
+    }
+    return { text, item };
   }
 
-  // Состав без кода и ккал: «овсянка 45 г; молоко 3% 140 мл; банан 100 г.»
+  // Состав без кода и ккал: «овсянка 45 г; молоко 3% 140 мл; банан 100 г. Кофе + 20 мл молока 3%.»
+  // Продукты разделены «;», кофе становится отдельной частью.
   function parseBody(body) {
-    const pieces = body.split(/(;\s*)/);
+    const pieces = body.split(/(;\s*|\s+(?=кофе\s*\+))/iu);
     const parts = [];
     for (let i = 0; i < pieces.length; i += 2) parts.push({ sep: i ? pieces[i - 1] : "", ...parseSegment(pieces[i]) });
     return parts;
@@ -137,23 +150,31 @@
     return `${text} ${fmt(qty)} ${unit === "пачка" ? packWord(qty) : unit}`;
   }
 
+  // Кофе для добавления в состав: «Кофе + 20 мл молока 3%».
+  const coffeeText = (milk, qty) => `Кофе + ${fmt(qty)} мл ${milk.replace(/^молоко/, "молока")}`;
+
   // Добавляет часть в конец состава, после последнего продукта и перед тем, что идёт за ним:
   // «; огурец 100 г. Кофе + 20 мл молока 3%.» или «; огурец 100 г. За 1–1,5 часа до тренировки.»
+  // Кофе встаёт в самый конец отдельным предложением.
   function addSegment(body, segment) {
     const text = body.trim();
+    if (COFFEE_START_RE.test(segment)) return text ? `${text.replace(/[\s.;]+$/, "")}. ${segment}.` : `${segment}.`;
     const parts = parseBody(text);
     let i = parts.length - 1;
-    while (i >= 0 && !parts[i].item) i--;
+    while (i >= 0 && (!parts[i].item || parts[i].item.milk)) i--;
     if (i < 0) {
       if (!text) return `${segment}.`;
       // Остался только кофе или пояснение: продукт встаёт перед ним.
-      if (/^[А-ЯЁA-Z]/u.test(text)) return `${segment}. ${text}`;
+      if (/^[А-ЯЁA-Z]/u.test(text) || COFFEE_START_RE.test(text)) return `${segment}. ${text}`;
       return `${text.replace(/[\s.]+$/, "")}; ${segment}.`;
     }
     const { item } = parts[i];
     const head = parts[i].text.slice(0, parts[i].text.length - item.tail.length);
-    // «1 шт. Десерт-вечер: …»: точка стояла в «шт.», после нового продукта предложение заканчивается заново.
-    const tail = /^\s+\S/u.test(item.tail) ? `.${item.tail}` : item.tail;
+    // «1 шт. Десерт-вечер: …» и «2 шт. Кофе + …»: точка стояла в «шт.», после нового продукта предложение
+    // заканчивается заново.
+    const next = parts[i + 1];
+    const endsSentence = /^\s+\S/u.test(item.tail) || (!item.tail && /\.$/.test(head) && next && !next.sep.includes(";"));
+    const tail = endsSentence ? `.${item.tail}` : item.tail;
     parts[i] = { ...parts[i], text: `${head}; ${segment}${tail}` };
     return parts.map((p, j) => (j ? p.sep : "") + p.text).join("");
   }
@@ -187,10 +208,11 @@
   const defaultUnits = new Map(DEFAULTS.map(([key, , unit]) => [keyOf(key), unit]));
 
   // Ключ в таблице калорийности: продукт плана в его единицах или «продукт|единица»
-  // для своих продуктов и для продукта плана в других единицах («банан 1 шт.»).
+  // для своих продуктов и для продукта плана в других единицах («банан 1 шт.»). У кофе ключ его молока.
   function foodId(key, unit) {
-    const def = defaultUnits.get(key);
-    return def && unitKind(def) === unitKind(unit) ? key : `${key}|${unitKind(unit)}`;
+    const food = key.startsWith(COFFEE_KEY) ? key.slice(COFFEE_KEY.length) : key;
+    const def = defaultUnits.get(food);
+    return def && unitKind(def) === unitKind(unit) ? food : `${food}|${unitKind(unit)}`;
   }
 
   // Ккал количества продукта: на 100 г или 100 мл, на штуку или на пачку.
@@ -233,16 +255,16 @@
 
   // Состав под свою калорийность продуктов. table: калорийность в этот день, defaults: по умолчанию.
   // keepKcal: граммовка продукта меняется так, чтобы его ккал остались как по калорийности по умолчанию,
-  // иначе граммовка прежняя. qtys: новое количество по номеру части. extra: на сколько ккал состав отличается
-  // от посчитанного по калорийности по умолчанию. У своего продукта калорийности по умолчанию нет,
-  // поэтому его ккал целиком входят в extra.
+  // иначе граммовка прежняя. qtys: новое количество по номеру части. extra: сколько прибавить к ккал из текста
+  // состава. Они посчитаны по калорийности по умолчанию без своих продуктов и без кофе, поэтому ккал своего
+  // продукта и кофе целиком входят в extra, а граммовка кофе не подстраивается.
   function adapt(parts, table, defaults, keepKcal) {
     const qtys = [];
     let extra = 0;
     parts.forEach(({ item }, i) => {
       if (!item) return;
       const kcal = (qty, t) => kcalOf(item.key, qty, item.unit, item.factor, t);
-      const def = kcal(item.qty, defaults);
+      const def = item.milk ? null : kcal(item.qty, defaults);
       const now = kcal(item.qty, table);
       let qty = item.qty;
       if (keepKcal && def && now && now !== def) {
@@ -298,7 +320,7 @@
     return base !== undefined && (base - qty) * (base - value) < 0 ? base : value;
   }
 
-  const api = { DEFAULTS, keyOf, unitKind, foodId, parseBody, segmentText, addSegment, compose, kcalOf, delta, adapt, valueAt, withValue, stepQty, fmt, num };
+  const api = { DEFAULTS, COFFEE_RE, keyOf, unitKind, foodId, parseBody, segmentText, coffeeText, addSegment, compose, kcalOf, delta, adapt, valueAt, withValue, stepQty, fmt, num };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.FOODS = api;
 })(typeof window !== "undefined" ? window : globalThis);

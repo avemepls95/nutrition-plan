@@ -81,13 +81,37 @@ test("adapt: своя калорийность кефира, держим гра
 
 test("adapt: своей калорийности нет => состав и ккал как были", () => {
   // Arrange
-  const parts = FOODS.parseBody("овсянка 45 г; молоко 3% 140 мл; банан 100 г. Кофе + 20 мл молока 3%.");
+  const parts = FOODS.parseBody("овсянка 45 г; молоко 3% 140 мл; банан 100 г.");
 
   // Act
   const result = FOODS.adapt(parts, defaults, defaults, true);
 
   // Assert
   assert.deepEqual(result, { qtys: [], extra: 0 });
+});
+
+test("adapt: кофе, калорийность по умолчанию => ккал кофе целиком в добавке", () => {
+  // Arrange
+  const parts = FOODS.parseBody("овсянка 45 г; банан 100 г. Кофе + 20 мл молока 3%.");
+
+  // Act
+  const result = FOODS.adapt(parts, defaults, defaults, true);
+
+  // Assert
+  assert.deepEqual(result, { qtys: [], extra: 12 });
+});
+
+test("adapt: кофе, своя калорийность молока, держим ккал => объём молока в кофе тот же, ккал кофе по своей калорийности", () => {
+  // Arrange
+  const parts = FOODS.parseBody("Кофе + 20 мл молока 3%.");
+  const table = tableWith({ "молоко 3%": 64 });
+
+  // Act
+  const result = FOODS.adapt(parts, table, defaults, true);
+
+  // Assert
+  assert.equal(result.qtys.length, 0);
+  assert.ok(Math.abs(result.extra - 12.8) < 1e-9);
 });
 
 test("adapt: свой продукт с калорийностью, держим ккал => граммовка та же, ккал продукта целиком в добавке", () => {
@@ -292,5 +316,95 @@ test("addSegment: добавленный продукт разбирается �
   const parts = FOODS.parseBody(FOODS.addSegment("банан 100 г. Кофе + 20 мл молока 3%.", "огурец 100 г"));
 
   // Assert
-  assert.deepEqual(parts.filter((p) => p.item).map((p) => [p.item.key, p.item.qty]), [["банан", 100], ["огурец", 100]]);
+  assert.deepEqual(parts.filter((p) => p.item).map((p) => [p.item.key, p.item.qty]), [["банан", 100], ["огурец", 100], ["кофе|молоко 3%", 20]]);
+});
+
+test("addSegment: «шт.» перед кофе => после нового продукта точка перед кофе", () => {
+  // Act
+  const result = FOODS.addSegment("яйца 2 шт. Кофе + 20 мл молока 3%.", "огурец 100 г");
+
+  // Assert
+  assert.equal(result, "яйца 2 шт.; огурец 100 г. Кофе + 20 мл молока 3%.");
+});
+
+test("addSegment: «шт.» перед частью через «;» => новый продукт без точки", () => {
+  // Act
+  const result = FOODS.addSegment("яйца 2 шт.; соль по вкусу", "хлеб 25 г");
+
+  // Assert
+  assert.equal(result, "яйца 2 шт.; хлеб 25 г; соль по вкусу");
+});
+
+test("addSegment: кофе => встаёт в конец отдельным предложением", () => {
+  // Act
+  const result = FOODS.addSegment("овсянка 45 г; яйца 2 шт.", FOODS.coffeeText("молоко 3%", 20));
+
+  // Assert
+  assert.equal(result, "овсянка 45 г; яйца 2 шт. Кофе + 20 мл молока 3%.");
+});
+
+test("parseBody: кофе после состава => отдельный продукт, количество это объём молока", () => {
+  // Act
+  const parts = FOODS.parseBody("банан 100 г. Кофе + 20 мл молока 3%.");
+
+  // Assert
+  const { name, key, qty, unit, milk } = parts[1].item;
+  assert.deepEqual({ sep: parts[1].sep, name, key, qty, unit, milk }, { sep: " ", name: "кофе с молоком 3%", key: "кофе|молоко 3%", qty: 20, unit: "мл", milk: "молоко 3%" });
+});
+
+test("parseBody: кофе без пробелов и с дробной жирностью => тоже продукт", () => {
+  // Act
+  const parts = FOODS.parseBody("Кофе+30мл молока 1,5%.");
+
+  // Assert
+  assert.deepEqual([parts[0].item.qty, parts[0].item.milk], [30, "молоко 1,5%"]);
+});
+
+test("foodId: кофе с молоком плана => калорийность молока плана", () => {
+  // Act
+  const id = FOODS.foodId("кофе|молоко 3%", "мл");
+
+  // Assert
+  assert.equal(id, "молоко 3%");
+});
+
+test("foodId: кофе с молоком не из плана => своё молоко", () => {
+  // Act
+  const id = FOODS.foodId("кофе|молоко 1%", "мл");
+
+  // Assert
+  assert.equal(id, "молоко 1%|г");
+});
+
+test("compose: у кофе стало больше молока => фраза кофе с новым объёмом", () => {
+  // Arrange
+  const parts = FOODS.parseBody("банан 100 г. Кофе + 20 мл молока 3%.");
+
+  // Act
+  const result = FOODS.compose(parts, [undefined, 30]);
+
+  // Assert
+  assert.equal(result, "банан 100 г. Кофе + 30 мл молока 3%.");
+});
+
+test("compose: кофе убран => состав заканчивается точкой", () => {
+  // Arrange
+  const parts = FOODS.parseBody("овсянка 45 г; банан 100 г. Кофе + 20 мл молока 3%.");
+
+  // Act
+  const result = FOODS.compose(parts, [undefined, undefined, 0]);
+
+  // Assert
+  assert.equal(result, "овсянка 45 г; банан 100 г.");
+});
+
+test("delta: у кофе стало больше молока => ккал растут по молоку", () => {
+  // Arrange
+  const before = FOODS.parseBody("Кофе + 20 мл молока 3%.");
+
+  // Act
+  const result = FOODS.delta(before, [{ item: before[0].item, qty: 30 }], defaults);
+
+  // Assert
+  assert.deepEqual(result, { kcal: 6, missing: [] });
 });
