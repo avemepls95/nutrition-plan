@@ -183,6 +183,17 @@
         <button class="btn" type="button" id="data-import">Загрузить</button>
         <input type="file" id="data-file" accept="application/json,.json" hidden>
       </div>
+      <div class="disk" id="disk">
+        <h3>Копия на Яндекс Диске</h3>
+        <p class="disk-state" id="disk-state" aria-live="polite"></p>
+        <form class="disk-key" id="disk-form" autocomplete="off">
+          <input type="text" id="disk-token" placeholder="Ключ" aria-label="Ключ Яндекс Диска" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="done">
+          <button class="btn primary" type="submit">Сохранить</button>
+        </form>
+        <div class="data-actions">
+          <button class="btn" type="button" id="disk-off" hidden>Отключить</button>
+        </div>
+      </div>
 
       <h2>Базовая неделя · без тренировок</h2>
       <p id="base-note"></p>
@@ -197,6 +208,7 @@
 <script src="plan.js"></script>
 <script src="foods.js"></script>
 <script src="backup.js"></script>
+<script src="disk.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

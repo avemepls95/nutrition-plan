@@ -1113,6 +1113,23 @@ body.is-swapping .meal.is-added > .meal-row { opacity: 0.45; }
 .seg button[aria-pressed="true"] { background: var(--card); color: var(--ink); box-shadow: 0 1px 3px rgb(0 0 0 / 0.12); }
 
 .data-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 4px 8px; }
+.disk h3 { margin: 22px 4px 4px; font: 650 16px/1.25 var(--f-num); }
+.prose .disk-state { font-size: 14px; color: var(--ink-2); }
+.disk-err { color: var(--ink); }
+.disk-key { display: flex; gap: 8px; margin: 0 4px 8px; }
+.disk-key input {
+  flex: 1;
+  min-width: 0;
+  height: 42px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--card);
+  color: var(--ink);
+  font: 500 16px/1 var(--f-ui);
+}
+.disk-key input::placeholder { color: var(--ink-3); }
+.disk-key input:focus-visible { outline-offset: 1px; }
 
 #base-week { padding: 0 max(var(--gut), env(safe-area-inset-right)) calc(40px + env(safe-area-inset-bottom)) max(var(--gut), env(safe-area-inset-left)); }
 #base-week .day:first-child { margin-top: 0; }

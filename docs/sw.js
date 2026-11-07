@@ -1,5 +1,5 @@
 // Версию меняем при каждой публикации, чтобы телефон забрал новые файлы.
-const CACHE = "plan-2026-11-07-2";
+const CACHE = "plan-2026-11-07-3";
 const ASSETS = [
   "./",
   "index.html",
@@ -8,6 +8,7 @@ const ASSETS = [
   "plan.js",
   "foods.js",
   "backup.js",
+  "disk.js",
   "manifest.webmanifest",
   "icons/apple-touch-icon.png",
   "icons/icon-192.png",

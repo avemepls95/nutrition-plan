@@ -4,12 +4,15 @@
   const PLAN = window.PLAN;
   const FOODS = window.FOODS;
   const BACKUP = window.BACKUP;
+  const DISK = window.DISK;
   const EDITS_KEY = "np.v1.edits";
   const WEIGHTS_KEY = "np.v1.weights";
   const KCAL_KEY = "np.v1.kcal";
   const THEME_KEY = "np.v1.theme";
   const DISHES_KEY = "np.v1.dishes";
   const DATA_KEYS = [EDITS_KEY, WEIGHTS_KEY, KCAL_KEY, DISHES_KEY, THEME_KEY];
+  // Копия на Яндекс Диске (ключ и что уже отправлено) хранится отдельно от данных и в файл копии не попадает.
+  const DISK_KEY = "np.v1.disk";
 
   const MON_SHORT = ["янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
   const WD = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
@@ -56,11 +59,22 @@
   function store(key, value) {
     try {
       localStorage.setItem(key, JSON.stringify(value));
+      if (DATA_KEYS.includes(key)) noteChange();
       return true;
     } catch {
       return false;
     }
   }
+
+  // Состояние копии на Яндекс Диске, см. DISK.due. Объявлено до первой записи данных, потому что store зовёт
+  // noteChange уже при запуске, когда переводит старую калорийность продуктов на дни.
+  let disk = load(DISK_KEY);
+  let diskTimer = 0;
+  let diskBusy = false;
+  // Тост про неподходящий ключ показывается один раз за запуск.
+  let diskWarned = false;
+  // Копия уходит через 5 с после правки, поэтому шаги степпера подряд уходят одной копией.
+  const DISK_DELAY = 5000;
 
   // Правка приёма пищи: { t: текст, f: откуда переехал при обмене, mode: "kcal" у блюда из плана с граммовкой
   // из плана («Менять ккал»), n: название моего блюда, at: время добавленного приёма пищи }.
@@ -2076,6 +2090,8 @@
 
   /* Копия данных */
 
+  const timeText = (d) => d.toLocaleString("ru-RU", { day: "numeric", month: "long", hour: "numeric", minute: "2-digit" });
+
   // В приложении с главного экрана iOS ссылка на скачивание открывает просмотр файла вместо сохранения
   // (WebKit bug 275288), поэтому там файл уходит в меню «Поделиться».
   function exportData() {
@@ -2100,18 +2116,106 @@
       toast("В файле нет данных плана");
       return;
     }
-    const when = backup.exported.toLocaleString("ru-RU", { day: "numeric", month: "long", hour: "numeric", minute: "2-digit" });
-    if (!confirm(`Заменить все данные на этом устройстве данными из файла от ${when}?`)) return;
+    if (!confirm(`Заменить все данные на этом устройстве данными из файла от ${timeText(backup.exported)}?`)) return;
     if (!BACKUP.restore(localStorage, DATA_KEYS, backup.data)) {
       toast("Не получилось сохранить данные на устройстве");
       return;
     }
+    // Данные записаны в обход store, поэтому их копия на Диск отмечается здесь и уходит после перезапуска.
+    noteChange();
     // Правки, калорийность и мои блюда читаются из хранилища при запуске, поэтому приложение перезапускается.
     // Состояние записи в истории переживает перезапуск, по нему после запуска появляется тост. Ленту после
     // перезапуска на вчера и сегодня ставит приложение, как при обычном запуске.
     history.replaceState({ loaded: true }, "", location.pathname);
     history.scrollRestoration = "manual";
     location.reload();
+  }
+
+  /* Копия на Яндекс Диске */
+
+  const DISK_ERRORS = {
+    auth: "Ключ не подходит, впишите новый.",
+    space: "На Диске нет места.",
+    network: "Нет связи с Диском, копия уйдёт позже.",
+  };
+
+  function noteChange() {
+    if (!disk.token) return;
+    disk.rev = (disk.rev || 0) + 1;
+    store(DISK_KEY, disk);
+    scheduleCopy();
+  }
+
+  function scheduleCopy() {
+    clearTimeout(diskTimer);
+    diskTimer = setTimeout(sendCopy, DISK_DELAY);
+  }
+
+  async function sendCopy() {
+    clearTimeout(diskTimer);
+    if (diskBusy || !DISK.due(disk)) return;
+    // Новое устройство до загрузки копии ничего не отправляет, самой свежей на Диске остаётся копия с данными.
+    if (DATA_KEYS.every((key) => localStorage.getItem(key) === null)) return;
+    const started = disk;
+    const { rev } = disk;
+    const now = new Date();
+    diskBusy = true;
+    renderDisk();
+    const result = await DISK.upload(started.token, DISK.fileName(now), BACKUP.pack(localStorage, DATA_KEYS, now));
+    diskBusy = false;
+    // Отключение ключа и новый ключ во время отправки заменяют объект состояния.
+    if (disk !== started) {
+      renderDisk();
+      sendCopy();
+      return;
+    }
+    disk = DISK.settle(disk, rev, now, result);
+    store(DISK_KEY, disk);
+    renderDisk();
+    if (result === "ok" && DISK.due(disk)) scheduleCopy();
+    if (result === "auth" && !diskWarned && view !== "info") {
+      diskWarned = true;
+      toast("Ключ Яндекс Диска не подходит", "Заменить", showDisk);
+    }
+  }
+
+  function renderDisk() {
+    const asking = !disk.token || disk.error === "auth";
+    $("#disk-form").hidden = !asking;
+    $("#disk-off").hidden = !disk.token;
+    let state = "С ключом копия данных уходит в папку «Приложения» на Диске после правок.";
+    let error = "";
+    if (disk.token) {
+      if (diskBusy) state = "Копия отправляется…";
+      else state = disk.at ? `Последняя копия ${timeText(new Date(disk.at))}.` : "С этого устройства копий ещё не было.";
+      if (!diskBusy && disk.error) error = DISK_ERRORS[disk.error] || `Диск не принял копию (ошибка ${disk.error}).`;
+    }
+    $("#disk-state").innerHTML = esc(state) + (error ? ` <span class="disk-err">${esc(error)}</span>` : "");
+  }
+
+  function saveDiskKey() {
+    const input = $("#disk-token");
+    const token = input.value.trim();
+    if (!token) return;
+    input.value = "";
+    input.blur();
+    disk = { token, rev: 1 };
+    if (!store(DISK_KEY, disk)) toast("Не получилось сохранить ключ на устройстве");
+    renderDisk();
+    sendCopy();
+  }
+
+  function disableDisk() {
+    clearTimeout(diskTimer);
+    disk = {};
+    store(DISK_KEY, disk);
+    renderDisk();
+  }
+
+  function showDisk() {
+    location.hash = "#info";
+    route();
+    $("#disk").scrollIntoView({ block: "center" });
   }
 
   /* События */
@@ -2139,6 +2243,10 @@
     }
     if (t.closest("#data-import")) {
       $("#data-file").click();
+      return;
+    }
+    if (t.closest("#disk-off")) {
+      disableDisk();
       return;
     }
     const jump = t.closest("[data-jump]");
@@ -2442,6 +2550,12 @@
     }
   });
 
+  document.addEventListener("submit", (e) => {
+    if (!e.target.matches("#disk-form")) return;
+    e.preventDefault();
+    saveDiskKey();
+  });
+
   document.addEventListener("keydown", (e) => {
     const t = e.target;
     if (t.matches(".ed-item input, .f-item input, [data-food], #food-search") && e.key === "Enter") {
@@ -2511,7 +2625,10 @@
     if (document.visibilityState === "hidden") {
       commitEditor();
       commitDish();
-    } else refreshDay();
+    } else {
+      refreshDay();
+      sendCopy();
+    }
   });
   window.addEventListener("pagehide", () => {
     commitEditor();
@@ -2546,12 +2663,14 @@
   renderFeed();
   renderBase();
   renderRecipes();
+  renderDisk();
   route();
   if (view === "plan") showPlan();
   if (history.state?.loaded) {
     history.replaceState(null, "");
     toast("Данные загружены");
   }
+  sendCopy();
   // Шрифт меняет высоту строк, поэтому положение пересчитывается, если пользователь ещё не листал.
   document.fonts?.ready.then(() => {
     if (view === "plan" && Math.abs(window.scrollY - homeY) < 2) goHome(false);
