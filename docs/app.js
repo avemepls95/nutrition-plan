@@ -2182,6 +2182,7 @@
   function renderDisk() {
     const asking = !disk.token || disk.error === "auth";
     $("#disk-form").hidden = !asking;
+    $("#disk-get").hidden = !asking;
     $("#disk-off").hidden = !disk.token;
     let state = "С ключом копия данных уходит в папку «Приложения» на Диске после правок.";
     let error = "";
