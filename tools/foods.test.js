@@ -661,3 +661,94 @@ test("weightOf: литры => в граммах", () => {
   // Assert
   assert.deepEqual(result, { grams: 500, skipped: [] });
 });
+
+test("followPortions: ккал на 100 г блюда выросли => граммы порции под те же ккал", () => {
+  // Arrange
+  const parts = FOODS.parseBody("«Торт» 69 г");
+
+  // Act
+  const result = FOODS.followPortions(parts, [], 300, portionTable());
+
+  // Assert
+  assert.equal(result[0], 75);
+});
+
+test("followPortions: ккал порции расходятся с ккал приёма пищи на округление => граммы остаются", () => {
+  // Arrange
+  const parts = FOODS.parseBody("«Торт» 75 г");
+
+  // Act
+  const result = FOODS.followPortions(parts, [], 301, portionTable());
+
+  // Assert
+  assert.equal(result[0], undefined);
+});
+
+test("followPortions: лёгкое блюдо, граммы выставили степпером => остаются", () => {
+  // Arrange
+  const parts = FOODS.parseBody("«Суп» 145 г");
+  const table = portionTable();
+  table.set("«суп»|г", { unit: "г", kcal: 30, portion: true });
+
+  // Act
+  const result = FOODS.followPortions(parts, [], 44, table);
+
+  // Assert
+  assert.equal(result[0], undefined);
+});
+
+test("followPortions: две порции, ккал разошлись больше округления => пересчитываются обе", () => {
+  // Arrange
+  const parts = FOODS.parseBody("«Торт» 100 г; «Пирог» 50 г");
+
+  // Act
+  const result = FOODS.followPortions(parts, [], 503, portionTable());
+
+  // Assert
+  assert.deepEqual(result, [101, 50]);
+});
+
+test("followPortions: ккал приёма пищи меньше, чем у кофе => граммы порции остаются", () => {
+  // Arrange
+  const parts = FOODS.parseBody("«Торт» 69 г. Кофе + 20 мл молока 3%.");
+
+  // Act
+  const result = FOODS.followPortions(parts, [], 10, portionTable());
+
+  // Assert
+  assert.equal(result[0], undefined);
+});
+
+test("followPortions: порция и кофе => порция получает ккал без кофе", () => {
+  // Arrange
+  const parts = FOODS.parseBody("«Торт» 69 г. Кофе + 20 мл молока 3%.");
+
+  // Act
+  const result = FOODS.followPortions(parts, [], 312, portionTable());
+
+  // Assert
+  assert.equal(result[0], 75);
+  assert.equal(result[1], undefined);
+});
+
+test("followPortions: у продукта в составе нет калорийности => граммы порции остаются", () => {
+  // Arrange
+  const parts = FOODS.parseBody("«Торт» 69 г; крем 20 г");
+
+  // Act
+  const result = FOODS.followPortions(parts, [], 300, portionTable());
+
+  // Assert
+  assert.equal(result[0], undefined);
+});
+
+test("followPortions: блюда порции нет в таблице (его удалили) => граммы остаются", () => {
+  // Arrange
+  const parts = FOODS.parseBody("«Медовик» 69 г");
+
+  // Act
+  const result = FOODS.followPortions(parts, [], 300, portionTable());
+
+  // Assert
+  assert.equal(result[0], undefined);
+});

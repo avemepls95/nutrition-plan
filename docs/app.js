@@ -238,14 +238,17 @@
   // text: что показывать и копировать. kcal: ккал для итога дня, у правки без числа как в плане, у убранного 0.
   // В тексте плана и правки ккал записаны без кофе, ккал кофе прибавляются по его молоку.
   // Удалённые к этому дню продукты уходят из состава вместе с их ккал, переименованные идут под новым названием.
+  // Порции моих блюд держат ккал приёма пищи, их граммовка следует за ккал на 100 г блюда.
   function shownOf(meal, edit = edits[meal.key], table = kcalTable(meal.day.iso)) {
     const text = edit ? edit.t : meal.text;
     if (!text.trim()) return { text: "", kcal: 0 };
     const keepKcal = (!edit || planTexts.has(edit.t)) && edit?.mode !== "kcal";
     const { code, kcal, rest } = splitHead(text);
     const parts = FOODS.parseBody(rest);
-    const { qtys, extra } = FOODS.adapt(parts, table, defaultKcal, keepKcal, droppedIn(table));
-    const total = (k) => Math.max(0, k + Math.round(extra));
+    const adapted = FOODS.adapt(parts, table, defaultKcal, keepKcal, droppedIn(table));
+    const total = (k) => Math.max(0, k + Math.round(adapted.extra));
+    const portions = kcal != null && parts.some((p) => p.item && isPortionItem(p.item));
+    const qtys = portions ? FOODS.followPortions(parts, adapted.qtys, total(kcal), editorTable(meal.day.iso, table)) : adapted.qtys;
     return {
       text: compose(code, kcal == null ? "" : String(total(kcal)), FOODS.compose(parts, qtys, nameOf)),
       kcal: total(kcal ?? (splitHead(meal.text).kcal || 0)),
@@ -384,11 +387,11 @@
     return weight && !missing.length ? (kcal * 100) / weight : null;
   }
 
-  // Калорийность для редактора: продукты и порции моих блюд (ккал на 100 г готового блюда). В итог дня ккал
-  // порции идут числом из правки, поэтому правка блюда не меняет приёмы пищи, куда его уже добавили.
-  // Блюдо, название которого в составе не разбирается как название продукта, порцией не считается.
-  function editorTable(iso) {
-    const products = kcalTable(iso);
+  // Калорийность продуктов products (по умолчанию в этот день) вместе с порциями моих блюд, у порции ккал
+  // на 100 г готового блюда. В итог дня ккал порции идут числом из правки, поэтому правка блюда меняет у порций
+  // только граммовку. Блюдо, название которого в составе не разбирается как название продукта, порцией
+  // не считается.
+  function editorTable(iso, products = kcalTable(iso)) {
     const table = new Map(products);
     for (const dish of Object.values(myDishes)) {
       const name = FOODS.portionName(dish.n);
@@ -1055,13 +1058,15 @@
   const mealEl = (key) => document.querySelector(`[data-key="${CSS.escape(key)}"]`);
   const barHeight = () => $(".bar").offsetHeight;
 
-  // Своя калорийность продуктов, по которой нарисована лента. Всю ленту перерисовываем только после её смены.
+  // Своя калорийность продуктов и мои блюда, по которым нарисована лента: от них зависят граммовка и ккал
+  // продуктов и порций. Всю ленту перерисовываем только после их смены.
   let feedFoods = null;
-  const foodsChanged = () => JSON.stringify(foodKcal) !== feedFoods;
+  const feedSource = () => JSON.stringify([foodKcal, myDishes]);
+  const foodsChanged = () => feedSource() !== feedFoods;
 
   function renderFeed() {
     nextKey = nextMeal()?.key ?? null;
-    feedFoods = JSON.stringify(foodKcal);
+    feedFoods = feedSource();
     feed.innerHTML = PLAN.weeks.map((week) => weekHtml(week) + week.items.map(dayHtml).join("")).join("");
     observeToday();
   }
@@ -2042,7 +2047,8 @@
     endSwap();
     closePanel();
     closeDish();
-    // На экране продуктов могли поменять калорийность, от неё зависят граммовка и ккал в ленте.
+    // На экране продуктов могли поменять калорийность, а в моих блюдах состав и вес. От них зависят граммовка
+    // и ккал в ленте.
     if (foodsChanged()) {
       renderFeed();
       renderBase();

@@ -289,24 +289,46 @@
     return { grams, skipped };
   }
 
-  // Количество порций моих блюд (у них в таблице калорийности portion), при котором состав набирает kcal ккал.
-  // Порции делят то, что остаётся после остальных продуктов, в прежней пропорции. qtys: новое количество
-  // по номеру части, как в compose. Возвращает новое количество порций по номеру части.
-  function fitPortions(parts, qtys, kcal, table) {
+  // Порции моих блюд (у них в таблице калорийности portion) и ккал состава. own: [номер части, количество]
+  // порций, ownKcal: их ккал, rest: ккал остальных продуктов, missing: у продукта или порции нет калорийности.
+  // qtys: новое количество по номеру части, как в compose.
+  function portionsOf(parts, qtys, table) {
     const own = [];
     let ownKcal = 0;
     let rest = 0;
+    let missing = false;
     parts.forEach(({ item }, i) => {
       const qty = item && (qtys[i] ?? item.qty);
       if (!qty) return;
-      const k = kcalOf(item.key, qty, item.unit, item.factor, table) ?? 0;
+      const k = kcalOf(item.key, qty, item.unit, item.factor, table);
+      if (k === null) missing = true;
       if (table.get(foodId(item.key, item.unit))?.portion) {
         own.push([i, qty]);
-        ownKcal += k;
-      } else rest += k;
+        ownKcal += k ?? 0;
+      } else rest += k ?? 0;
     });
+    return { own, ownKcal, rest, missing };
+  }
+
+  // Количество порций моих блюд, при котором состав набирает kcal ккал. Порции делят то, что остаётся после
+  // остальных продуктов, в прежней пропорции. Возвращает новое количество порций по номеру части.
+  function fitPortions(parts, qtys, kcal, table) {
+    const { own, ownKcal, rest } = portionsOf(parts, qtys, table);
     const out = [];
     if (ownKcal > 0) for (const [i, qty] of own) out[i] = roundQty(parts[i].item, (qty * (kcal - rest)) / ownKcal);
+    return out;
+  }
+
+  // Порции моих блюд держат ккал состава kcal, а их граммовка следует за ккал на 100 г блюда, например после
+  // того, как вписали вес готового блюда. Если ккал порций расходятся с ккал, которые им остаются, не больше чем
+  // на 1 ккал (округление ккал в правке), граммы остаются. Состав, где у продукта или порции нет калорийности
+  // или на порции ккал не остаётся, тоже не меняется. Возвращает qtys с новым количеством порций.
+  function followPortions(parts, qtys, kcal, table) {
+    const { ownKcal, rest, missing } = portionsOf(parts, qtys, table);
+    const need = kcal - rest;
+    if (missing || need < 1 || Math.abs(ownKcal - need) <= 1) return qtys;
+    const out = [...qtys];
+    fitPortions(parts, qtys, kcal, table).forEach((qty, i) => (out[i] = qty));
     return out;
   }
 
@@ -383,7 +405,7 @@
     return base !== undefined && (base - qty) * (base - value) < 0 ? base : value;
   }
 
-  const api = { DEFAULTS, COFFEE_RE, keyOf, setAliases, unitKind, foodId, parseBody, segmentText, coffeeText, portionName, addSegment, compose, kcalOf, delta, adapt, weightOf, fitPortions, valueAt, withValue, stepQty, fmt, num };
+  const api = { DEFAULTS, COFFEE_RE, keyOf, setAliases, unitKind, foodId, parseBody, segmentText, coffeeText, portionName, addSegment, compose, kcalOf, delta, adapt, weightOf, fitPortions, followPortions, valueAt, withValue, stepQty, fmt, num };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.FOODS = api;
 })(typeof window !== "undefined" ? window : globalThis);
