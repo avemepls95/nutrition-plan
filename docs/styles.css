@@ -1112,6 +1112,8 @@ body.is-swapping .meal.is-added > .meal-row { opacity: 0.45; }
 }
 .seg button[aria-pressed="true"] { background: var(--card); color: var(--ink); box-shadow: 0 1px 3px rgb(0 0 0 / 0.12); }
 
+.data-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 4px 8px; }
+
 #base-week { padding: 0 max(var(--gut), env(safe-area-inset-right)) calc(40px + env(safe-area-inset-bottom)) max(var(--gut), env(safe-area-inset-left)); }
 #base-week .day:first-child { margin-top: 0; }
 

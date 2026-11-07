@@ -3,11 +3,13 @@
 
   const PLAN = window.PLAN;
   const FOODS = window.FOODS;
+  const BACKUP = window.BACKUP;
   const EDITS_KEY = "np.v1.edits";
   const WEIGHTS_KEY = "np.v1.weights";
   const KCAL_KEY = "np.v1.kcal";
   const THEME_KEY = "np.v1.theme";
   const DISHES_KEY = "np.v1.dishes";
+  const DATA_KEYS = [EDITS_KEY, WEIGHTS_KEY, KCAL_KEY, DISHES_KEY, THEME_KEY];
 
   const MON_SHORT = ["янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
   const WD = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
@@ -2066,6 +2068,46 @@
 
   window.addEventListener("hashchange", route);
 
+  /* Копия данных */
+
+  // В приложении с главного экрана iOS ссылка на скачивание открывает просмотр файла вместо сохранения
+  // (WebKit bug 275288), поэтому там файл уходит в меню «Поделиться».
+  function exportData() {
+    const now = new Date();
+    const name = `План питания ${isoOf(now)}.json`;
+    const file = new File([BACKUP.pack(localStorage, DATA_KEYS, now)], name, { type: "application/json" });
+    if (navigator.standalone && navigator.canShare?.({ files: [file] })) {
+      navigator.share({ files: [file] }).catch((e) => {
+        if (e.name !== "AbortError") toast("Не получилось выгрузить данные");
+      });
+      return;
+    }
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(file);
+    link.download = name;
+    link.click();
+  }
+
+  async function importData(file) {
+    const backup = BACKUP.unpack(await file.text());
+    if (!backup) {
+      toast("В файле нет данных плана");
+      return;
+    }
+    const when = backup.exported.toLocaleString("ru-RU", { day: "numeric", month: "long", hour: "numeric", minute: "2-digit" });
+    if (!confirm(`Заменить все данные на этом устройстве данными из файла от ${when}?`)) return;
+    if (!BACKUP.restore(localStorage, DATA_KEYS, backup.data)) {
+      toast("Не получилось сохранить данные на устройстве");
+      return;
+    }
+    // Правки, калорийность и мои блюда читаются из хранилища при запуске, поэтому приложение перезапускается.
+    // Состояние записи в истории переживает перезапуск, по нему после запуска появляется тост. Ленту после
+    // перезапуска на вчера и сегодня ставит приложение, как при обычном запуске.
+    history.replaceState({ loaded: true }, "", location.pathname);
+    history.scrollRestoration = "manual";
+    location.reload();
+  }
+
   /* События */
 
   document.addEventListener("click", (e) => {
@@ -2083,6 +2125,14 @@
       themePref = theme.dataset.themeSet;
       store(THEME_KEY, themePref);
       applyTheme();
+      return;
+    }
+    if (t.closest("#data-export")) {
+      exportData();
+      return;
+    }
+    if (t.closest("#data-import")) {
+      $("#data-file").click();
       return;
     }
     const jump = t.closest("[data-jump]");
@@ -2378,6 +2428,12 @@
       t.value = f?.kcal == null ? "" : numText(f.kcal);
     }
     if (t.matches("[name=food-unit]")) $(".f-per").textContent = UNIT_LABEL[t.value];
+    if (t.matches("#data-file")) {
+      const [file] = t.files;
+      // Значение сбрасывается, чтобы повторный выбор того же файла тоже дал change.
+      t.value = "";
+      if (file) importData(file);
+    }
   });
 
   document.addEventListener("keydown", (e) => {
@@ -2486,6 +2542,10 @@
   renderRecipes();
   route();
   if (view === "plan") showPlan();
+  if (history.state?.loaded) {
+    history.replaceState(null, "");
+    toast("Данные загружены");
+  }
   // Шрифт меняет высоту строк, поэтому положение пересчитывается, если пользователь ещё не листал.
   document.fonts?.ready.then(() => {
     if (view === "plan" && Math.abs(window.scrollY - homeY) < 2) goHome(false);

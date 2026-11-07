@@ -177,6 +177,13 @@
         <button type="button" data-theme-set="auto">Как в системе</button>
       </div>
 
+      <h2>Данные</h2>
+      <div class="data-actions">
+        <button class="btn" type="button" id="data-export">Выгрузить</button>
+        <button class="btn" type="button" id="data-import">Загрузить</button>
+        <input type="file" id="data-file" accept="application/json,.json" hidden>
+      </div>
+
       <h2>Базовая неделя · без тренировок</h2>
       <p id="base-note"></p>
     </div>
@@ -189,6 +196,7 @@
 
 <script src="plan.js"></script>
 <script src="foods.js"></script>
+<script src="backup.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
